@@ -72,5 +72,16 @@ NURSE_SEED_MODEL="Thesis"
 LEAVES_WSGI="leave_management_project.wsgi:application"
 NURSE_WSGI="config.wsgi:application"
 
+# --- paths and endpoints the stage 3 challenges need ------------------------
+# Verify these against your VM after SETUP.md; they are the only things the
+# stage 3 checks assume about where configuration lives.
+LEAVES_ENV="/etc/leaves/leaves.env"          # EnvironmentFile= of the unit
+LEAVES_STATIC_ROOT="/opt/leaves/staticfiles" # STATIC_ROOT after collectstatic
+LEAVES_CSS="static/admin/css/base.css"       # relative to LEAVES_URL; Django always ships it
+NURSE_ENV="/opt/nurse/.env"                  # env_file: of the compose stack
+NURSE_LIST="http://localhost:8000/api/theses/"   # the list endpoint; confirm the route
+STAGES_UPLOADS_VOLUME="stages_uploads"       # docker volume name, from `docker volume ls`
+DEV_USER="dev1"                              # the over-privileged account in s3-07
+
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"

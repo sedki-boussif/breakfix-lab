@@ -1,0 +1,9 @@
+STAGE=3
+TYPE=incident
+TITLE="Nobody can upload the school logo"
+LEVEL=2
+APPS=stages
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-compose

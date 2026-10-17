@@ -75,9 +75,11 @@ assert_http_body() {
 }
 
 # assert_http_header <description> <url> <header regex>
+# Uses a GET with the headers dumped rather than a HEAD request: not every
+# application answers HEAD, and what matters is the response a browser gets.
 assert_http_header() {
   local desc="$1" url="$2" re="$3" headers
-  headers="$(curl -sSI --max-time 10 "$url" 2>/dev/null || true)"
+  headers="$(curl -sS -D - -o /dev/null --max-time 10 "$url" 2>/dev/null || true)"
   if grep -Eqi "$re" <<<"$headers"; then assert_pass "$desc"
   else assert_fail "$desc" "no header matching /${re}/ from $url"; fi
 }

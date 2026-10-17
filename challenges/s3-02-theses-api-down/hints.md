@@ -1,0 +1,6 @@
+The report is about missing data, but nothing in the brief establishes that the data is gone. Separate "the page shows nothing" from "there is nothing to show" before you go anywhere near a restore.
+Ask the API directly rather than through the browser: `curl -i` the health endpoint and the list endpoint. A frontend showing an empty list and an API that cannot answer at all look identical from a browser.
+The health endpoint is not returning 200. Health here means "the database answered", so the API process is alive and cannot reach its database — which also means nothing has deleted anything.
+`docker compose logs api --tail 50` names the host and port it is trying, and `docker compose exec db pg_isready` says where the database actually is. Compare the two.
+The port in `DATABASE_URL` is not the port the database is listening on. Fix it in the environment file, recreate the api service so it reads the new value, and the three thousand records are still there.
+Pointing `DATABASE_URL` at any database that happens to answer will turn the health check green and leave the list empty. The check asserts the list returns rows, because "connected to a database" and "connected to the right database" are different states.

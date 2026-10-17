@@ -1,0 +1,9 @@
+STAGE=3
+TYPE=incident
+TITLE="Theses API is down, site shows an empty list"
+LEVEL=2
+APPS=nurse
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-compose

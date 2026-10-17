@@ -1,0 +1,6 @@
+Nizar says he put the line back. Verify that rather than believing it — and remember that "restarted it a few times" has consequences of its own in systemd.
+`systemctl status leaves` and `journalctl -u leaves -n 50 --no-pager`. This is not a 203/EXEC: the process starts, Python runs, and then it dies. Read the traceback.
+The traceback is a Django settings error raised at import. This app reads its settings with `python-decouple` and `SECRET_KEY` has no default, so a missing variable is a hard failure rather than an insecure fallback. That is the app being well written, not the fault.
+Compare the environment file the unit actually reads — `systemctl show -p EnvironmentFiles leaves` — with what the settings module requires. Something that should be there is not.
+Generate a new secret and put it in the environment file, then `systemctl reset-failed` before restarting: after that many failed starts the unit has hit its start limit and will refuse to start even once the config is correct.
+Do not reuse a value out of the repository, the git history, or an example file — a secret that has ever been published is not a secret. The check refuses any value it can find in the repo, and anything under 40 characters.

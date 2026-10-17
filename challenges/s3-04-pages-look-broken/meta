@@ -1,0 +1,9 @@
+STAGE=3
+TYPE=incident
+TITLE="Pages load but look broken"
+LEVEL=2
+APPS=leaves
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-systemd

@@ -1,0 +1,9 @@
+STAGE=3
+TYPE=incident
+TITLE="A developer has too much sudo"
+LEVEL=1
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

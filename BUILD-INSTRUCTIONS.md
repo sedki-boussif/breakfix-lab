@@ -182,11 +182,20 @@ Design notes:
 - A challenge's `meta` file is shell-sourceable: `STAGE`, `TYPE` (`mission` or
   `incident`), `TITLE`, `LEVEL` (1–5), `APPS` (which of stages/leaves/nurse it
   touches, or `system`), `NEEDS` (prerequisite ids), `SNAPSHOT` (`clean` or
-  `deployed`), and `RISK`, which is empty for everything that `reset.sh` can
+  `deployed`), `PROVEN` (below), and `RISK`, which is empty for everything that `reset.sh` can
   undo and `irreversible` for the few that it cannot. `RISK=irreversible` is
   what excludes a challenge from `lab chaos` and from `make test`, so it is not
   optional decoration: a challenge whose brief says "snapshot required" must
   carry it.
+- **`PROVEN` records how a challenge has actually been verified**, because
+  "shellcheck is clean" is not the same claim as "I watched this break and
+  recover". One of four values: `mock-systemd` or `mock-compose` (exercised
+  against a stand-in service manager, which proves the challenge's logic but not
+  the real application), `real` (exercised against the real thing on the lab VM),
+  or `unproven` (written and linted, never run). `make selftest` prints the
+  counts, so "what should I re-verify first" has a one-command answer. Update the
+  field by hand after a real run — it is a record, not an assertion, and nothing
+  enforces it but honesty.
 - **Only `start`, `check` and `reset` require `lab.conf`**, because only those
   three touch the running system. `list`, `status`, `next`, `hint`, `report`,
   `solution` and `--help` read nothing but this repo and the progress state, so
@@ -221,13 +230,13 @@ Every challenge folder holds the same seven files.
 
 ```
 challenges/s3-01-service-wont-start/
-  meta          STAGE=3 TYPE=incident TITLE="..." LEVEL=2 APPS=leaves NEEDS= SNAPSHOT=deployed RISK=
+  meta          STAGE=3 TYPE=incident TITLE="..." LEVEL=2 APPS=leaves NEEDS= SNAPSHOT=deployed RISK= PROVEN=mock-systemd
   brief.md      the ticket, written as a user or a colleague would report it
   break.sh      guarded; causes the fault; records state; prints nothing useful
   check.sh      guarded; asserts the end state; one line per assertion; 0 or 1
   hints.md      one hint per line, ordered from gentle nudge to near-answer
   reset.sh      guarded; undoes break.sh
-  notes.md      for the author: what the fault really is, why it is realistic
+  notes.md      for the author: what the fault really is, why it is realistic, and the trap
 ```
 
 **`brief.md` is a ticket, not a lesson.** It says what someone noticed and when, in
@@ -235,6 +244,33 @@ the voice of whoever would notice it, and nothing about the cause.
 Good: *"HR says the leave app shows a 502 since about 14:00. It worked this
 morning. The CEO needs to approve three requests before Friday."*
 Bad: *"The gunicorn socket permissions were changed, fix them."*
+
+**Name the trap, and make `check.sh` refuse it.** Wherever a plausible wrong fix
+exists — one that makes the symptom go away while leaving the cause in place —
+`notes.md` names it explicitly under the heading **The trap**, and `check.sh`
+must catch it. s3-01 is the model: hand-starting gunicorn restores the page, so
+the check restarts the service through the service manager, and a hand-started
+process cannot pass. The point is not to be clever; it is that the shortcut which
+treats the symptom is the habit that makes a server work until the next reboot.
+
+Not every fault has one, and a strained invention is worse than none: if the only
+way to make the symptom go away is to fix the cause, say so in `notes.md` and
+move on. But where the shortcut is obvious — `chmod 777`, `DEBUG=True`, "any
+database rather than the right database", a `NOPASSWD` entry broader than it
+needs to be — the check refuses it, and the brief never hints that it will.
+
+**Vary the reporter.** Briefs written in a batch drift into one voice, and a
+catalogue where every ticket sounds the same trains you to read tickets you will
+never receive. Mix deliberately:
+
+- a user who describes the symptom **wrongly** — "the site has been redesigned",
+  when the stylesheet failed to load;
+- a colleague who **already tried something** and made it worse;
+- a **monitoring alert**: a timestamp, a threshold, no interpretation;
+- someone **vague** — "it's been weird since this morning";
+- and the most useful kind: one where the **reported symptom and the real fault
+  are in different components**, so the first instinct sends you to the wrong
+  layer entirely.
 
 **`break.sh` hides the cause without being unfair.** The evidence must be findable
 with ordinary tools — `systemctl status`, `journalctl`, `docker compose logs`, `ss`,
@@ -590,7 +626,18 @@ challenges before the first one works end to end.
 5. **Stage 2, 4, 6, 7** challenges.
 6. **Stage 8**, a long acceptance suite plus a brief. Then **Stage 9**: build
    `lab chaos`, `lib/load.sh` and `health_check` first, then its seven challenges.
-7. **`solutions/`** for everything.
+7. **A final consistency pass over `solutions/`** — not the writing of them.
+
+**Every challenge ships `solutions/<id>.md` as part of building it**, in the same
+sitting as its seven files, immediately after its check has been seen to pass and
+fail. This replaces an earlier version of step 7, which deferred all fifty
+solutions to the end. The reason for the change: the model answer is a record of
+an evidence chain — which command revealed what, which dead end was worth
+recording — and that chain is in hand exactly once, while the challenge is being
+verified. Deferring fifty of them means re-deriving fifty cold, from the scripts
+rather than from having watched them run, which produces a worse answer and a
+slower build. Step 7 is now only the pass that makes the fifty consistent with
+each other.
 
 ---
 
