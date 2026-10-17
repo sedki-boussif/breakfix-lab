@@ -10,6 +10,21 @@ near this VM, and no real domain or address appears in any file. All three apps
 answer on invented hostnames under `.invalid`, which is reserved and can never
 resolve on the public internet.
 
+**Where this file and a repository disagree, the repository wins.** `leaves` and
+`nurse` are not mine: each ships its own deployment documentation, and §6 and §7
+below are my *summary* of it, written without the repositories in front of me.
+Read theirs first, reconcile, and follow theirs:
+
+| App | Read these, in the repo, before starting its section |
+| --- | --- |
+| `leaves` | `README_VPS.md`, `README_POSTGRESQL.md` |
+| `nurse` | `deployment/QUICK_START.md`, `deployment/setup_vps.sh`, `deployment/CONFIG_TEMPLATES.md`, `settings_production.py` |
+
+Where they contradict this file, **write the contradiction down and report it**
+rather than picking whichever looks more plausible. A guess that happens to work
+is worse than a disagreement you can see, because it survives into every
+challenge built on top of it.
+
 **Development machine versus lab VM.** These instructions target **Ubuntu 24.04
 LTS**. If you are reading them on Parrot, or any other distribution, expect
 package names, the state of `ssh.socket` and `ufw`'s defaults to differ — the
@@ -21,26 +36,39 @@ between every `break.sh` in this repo and your filesystem.
 
 ## 1. What you are building
 
-| App | Runs as | Container/host port | Answers on |
+| App | Runs as | Host port | Answers on |
 | --- | --- | --- | --- |
 | `stages` (stand-in) | Docker Compose, project `stages` | `127.0.0.1:8080` | `https://stages.lab.invalid/` |
 | `leaves` | gunicorn under systemd | `127.0.0.1:8081` | `https://conge.lab.invalid/etoile-formation-conge/` |
-| `nurse` | Docker Compose, project `nurse` | `127.0.0.1:8000` (api), `127.0.0.1:3000` (web) | `https://theses.lab.invalid/` |
+| `nurse` | gunicorn under systemd, built frontend served by host nginx | `127.0.0.1:8000` (api), `127.0.0.1:3000` (frontend) | `https://theses.lab.invalid/` |
 
-One host nginx terminates TLS and proxies to all three. Every container
-publishes to loopback only, so the host nginx is the only way in — which is
-exactly the arrangement s4-04 asks you to prove is **not** automatic with
-Docker.
+One host nginx terminates TLS and proxies to all three.
 
-**The three are deliberately not run the same way.** `leaves` starts life as
-gunicorn under systemd so that s6-02 ("containerise the leave app") has real
-work to do; `nurse` runs in containers so that s4-04 has a published port to
-argue about. `lab.conf` records this per app:
+**Only `stages` is containerised, and that is deliberate.** It is the stand-in
+written in this repository, so it has Dockerfiles and a compose file that are
+known to work. Neither public repository ships either: `leaves` has
+`render.yaml` and `README_VPS.md`, `nurse` has `render.yaml`, `build.sh` and
+`deployment/setup_vps.sh` with a `settings_production.py` — both are gunicorn
+deployments, and both of their own deployment documents assume exactly that.
+
+Writing a Dockerfile for an API, another for a frontend, and a compose file to
+join them — untested, in the middle of a first run — is a bad trade. So:
+
+- **`stages` is the app s4-04 uses** ("Docker goes around the firewall"), being
+  the only one with genuinely published container ports.
+- **Containerising the other two is a graded mission**: s6-02 for `leaves`,
+  s6-07 for `nurse`. Learning to containerise an application is worth doing as
+  an exercise with a check on it, rather than having setup do it invisibly.
+
+`lab.conf` records the per-app mode, and `lib/svc.sh` resolves it per app, so a
+challenge can be talking to compose and to systemd in the same script:
 
 ```bash
-RUN_MODE="compose"      # default
-STAGES_MODE="compose"; LEAVES_MODE="systemd"; NURSE_MODE="compose"
+RUN_MODE="compose"      # the default, for anything without its own mode
+STAGES_MODE="compose"; LEAVES_MODE="systemd"; NURSE_MODE="systemd"
 ```
+
+When you finish s6-02 or s6-07, change that app's mode and the challenges follow.
 
 ---
 
@@ -488,88 +516,126 @@ not point it at the journal instead.
 
 ---
 
-## 7. `nurse` — containers, and a build-time API URL
+## 7. `nurse` — gunicorn under systemd, and a build-time API URL
 
-The public thesis-catalogue repository. It runs in containers, so that s4-04 has
-a published port to argue about.
+The public thesis-catalogue repository. Like `leaves`, it runs **without
+Docker**: its own `deployment/` directory describes a gunicorn deployment, and
+containerising it is s6-07's job rather than setup's.
+
+**Read the repository's own deployment documents first**, and follow them where
+they differ from what is below:
 
 ```bash
 sudo mkdir -p /opt/nurse && sudo chown "$USER":"$USER" /opt/nurse
-git clone <the nurse repository> /opt/nurse
+# SUBSTITUTE the URL.
+git clone https://github.com/<you>/nurse.git /opt/nurse
 cd /opt/nurse
+ls -1 deployment/ ; ls -1 render.yaml build.sh settings_production.py 2>&1
+sed -n '1,80p' deployment/QUICK_START.md
+sed -n '1,120p' deployment/setup_vps.sh        # read it; do not run it blind
+sed -n '1,80p' deployment/CONFIG_TEMPLATES.md
 ```
 
-**First, see what the repo gives you**, because the next block is only for the
-case where it gives you nothing:
+`setup_vps.sh` very likely does most of what follows — a virtualenv, a database,
+an environment file, a unit, and an nginx block. **Prefer it to the steps below**
+where they overlap, and treat the rest of this section as the shape the lab
+expects the result to have: api on `127.0.0.1:8000`, built frontend on
+`127.0.0.1:3000`, configuration in a file systemd loads. Note every place you
+had to deviate.
 
 ```bash
-ls -1 compose.yaml docker-compose.yml Dockerfile frontend/Dockerfile 2>&1
+# The virtualenv and dependencies.
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt gunicorn
 ```
 
-If it ships a compose file, use that and only borrow the ports and healthchecks
-below. If it does not, **write this file yourself** — it is not a diagram, and
-nothing creates it for you:
-
 ```bash
-cat > /opt/nurse/compose.yaml <<'YAML'
-name: nurse
-services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: nurse
-      POSTGRES_USER: nurse_app
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes: [db_data:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nurse_app -d nurse"]
-      interval: 10s
-      retries: 5
-  api:
-    build: .
-    env_file: .env
-    ports: ["127.0.0.1:8000:8000"]
-    depends_on:
-      db: {condition: service_healthy}
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health/')\""]
-      interval: 10s
-      retries: 5
-  web:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: https://theses.lab.invalid/api
-    ports: ["127.0.0.1:3000:80"]
-volumes:
-  db_data:
-YAML
+# Its own database, on the host Postgres.
+NURSE_PW="$(openssl rand -hex 16)"
+sudo -u postgres createuser nurse_app
+sudo -u postgres createdb -O nurse_app nurse
+sudo -u postgres psql -c "ALTER ROLE nurse_app WITH PASSWORD '${NURSE_PW}'"
 ```
 
-`build: .` and `context: ./frontend` assume a `Dockerfile` at the repo root and
-another under `frontend/`. The `ls` above tells you whether that is true; if the
-layout differs, fix the paths here before continuing rather than after.
-
 ```bash
-# Secrets. This app has two real weaknesses, kept on purpose as material for
-# s4-07: SECRET_KEY falls back to a hard-coded insecure default, and DEBUG
-# defaults to True when unset. Set both explicitly here, and fix the code in
-# s4-07 so that neither fallback exists.
-cat > .env <<EOF
+# The environment file. Reconcile these names with CONFIG_TEMPLATES.md and
+# settings_production.py before trusting them — that file is the authority on
+# what this app reads.
+#
+# This app has two real weaknesses, kept on purpose as material for s4-07:
+# SECRET_KEY falls back to a hard-coded insecure default, and DEBUG defaults to
+# True when unset. Both are set explicitly here; s4-07 removes the fallbacks.
+sudo install -d -m 750 /etc/nurse
+sudo tee /etc/nurse/nurse.env > /dev/null <<EOF
+DJANGO_SETTINGS_MODULE=settings_production
 SECRET_KEY=$(openssl rand -hex 32)
 DEBUG=False
-DB_PASSWORD=$(openssl rand -hex 16)
+DATABASE_URL=postgres://nurse_app:${NURSE_PW}@127.0.0.1:5432/nurse
 ALLOWED_HOSTS=theses.lab.invalid,127.0.0.1,localhost
 CORS_ALLOWED_ORIGINS=https://theses.lab.invalid
 CSRF_TRUSTED_ORIGINS=https://theses.lab.invalid
 EOF
-chmod 600 .env
-docker compose up -d --build --wait
-docker compose exec -T api python manage.py migrate
-# This repo ships its own command for the staff account; use it rather than
-# createsuperuser, so the role and defaults it sets are the ones you get.
-docker compose exec -T api python manage.py create_default_superuser
+sudo chmod 640 /etc/nurse/nurse.env
+unset NURSE_PW
 ```
+
+```bash
+# Migrations, static files, and the staff account the repo ships a command for.
+# As root with the env file loaded, because it is root-only — same as leaves.
+sudo bash -c 'set -a; . /etc/nurse/nurse.env; set +a
+  cd /opt/nurse
+  ./.venv/bin/python manage.py migrate
+  ./.venv/bin/python manage.py collectstatic --no-input
+  ./.venv/bin/python manage.py create_default_superuser'
+```
+
+```bash
+# The API unit. s5-04 adds a MemoryMax drop-in to this unit, and s3-06 disables
+# it, so this is the file those two challenges act on.
+sudo tee /etc/systemd/system/nurse-api.service > /dev/null <<'EOF'
+[Unit]
+Description=nurse (theses catalogue API)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/nurse
+EnvironmentFile=/etc/nurse/nurse.env
+ExecStart=/opt/nurse/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 \
+          --access-logfile /var/log/nurse/access.log \
+          --error-logfile /var/log/nurse/error.log \
+          config.wsgi:application
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo install -d -o www-data -g www-data /var/log/nurse
+sudo chown -R www-data:www-data /opt/nurse
+sudo systemctl daemon-reload && sudo systemctl enable --now nurse-api
+systemctl is-active nurse-api
+curl -fsS http://127.0.0.1:8000/api/health/ ; echo
+```
+
+```bash
+# The frontend: built once, then served as static files by the host nginx.
+#
+# VITE_API_URL is read at BUILD time, not at run time. A wrong value is baked
+# into the bundle and shows up only in the browser — the API will be perfectly
+# healthy and the page still empty. That is the shape s3-02 exploits.
+cd /opt/nurse/frontend
+sudo chown -R "$USER":"$USER" /opt/nurse/frontend
+VITE_API_URL=https://theses.lab.invalid/api npm ci
+VITE_API_URL=https://theses.lab.invalid/api npm run build
+ls -la dist/index.html            # must exist; this is what nginx serves
+grep -ro 'theses.lab.invalid' dist/assets/ | head -1   # proof the value was baked in
+```
+
+If `npm` is not installed: `sudo apt install -y nodejs npm`, or use the
+repository's own instructions if it pins a Node version.
 
 **The layout, pinned.** The Django project package is `config`, so
 `config.wsgi:application` is correct here (unlike `leaves`). The application is
@@ -589,19 +655,9 @@ start, or you will fix a copy nothing imports.
 
 ```bash
 # Verify before trusting any of the above:
-docker compose exec -T api ls config/wsgi.py theses/models.py
-docker compose exec -T api python manage.py showmigrations theses | tail -3
-docker compose exec -T api python manage.py help | grep -A3 '\[theses\]'
-```
-
-**`VITE_API_URL` is read at build time**, not at run time. A wrong value is
-baked into the JavaScript bundle and shows up only in the browser — the API will
-be perfectly healthy and the page still empty. Remember this shape: it is how
-s3-02 can look like a frontend fault when it is not.
-
-```bash
-curl -fsS http://127.0.0.1:8000/api/health/ && echo
-curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
+ls /opt/nurse/config/wsgi.py /opt/nurse/theses/models.py
+sudo bash -c 'set -a; . /etc/nurse/nurse.env; set +a
+  cd /opt/nurse && ./.venv/bin/python manage.py showmigrations theses | tail -3'
 ```
 
 ---
@@ -637,20 +693,31 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
-# nurse — api and the built bundle are separate upstreams
+# nurse — the api is a gunicorn upstream; the frontend is static files.
+# The 127.0.0.1:3000 block exists so that "the frontend" has a port of its own,
+# which is what lab.conf's NURSE_WEB names and what the challenges curl.
+server {
+    listen 127.0.0.1:3000;
+    server_name _;
+    root /opt/nurse/frontend/dist;
+    index index.html;
+    location / { try_files $uri $uri/ /index.html; }
+}
 server {
     listen 80;
     server_name theses.lab.invalid;
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         client_max_body_size 16m;
     }
     location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
+        root /opt/nurse/frontend/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
     }
 }
 EOF
@@ -685,7 +752,9 @@ had to be hand-edited three times, which is how a verification step ends up
 testing something nobody did — so it is a command:
 
 ```bash
-# Add the TLS listener to every server block that has a plain one.
+# Add the TLS listener to every vhost that has a plain `listen 80;`. This
+# deliberately does not match the `listen 127.0.0.1:3000;` block, which is an
+# internal upstream and has no business terminating TLS.
 sudo sed -i 's|^    listen 80;|    listen 80;\n    listen 443 ssl;\n    ssl_certificate /etc/nginx/tls/lab.crt;\n    ssl_certificate_key /etc/nginx/tls/lab.key;|' \
   /etc/nginx/sites-available/lab
 sudo nginx -t && sudo systemctl reload nginx
@@ -807,8 +876,8 @@ curl -fsS -o /dev/null -w 'leaves  %{http_code}\n' http://127.0.0.1:8081/etoile-
 curl -fsS -o /dev/null -w 'nurse   %{http_code}\n' http://127.0.0.1:3000/
 curl -fsS http://127.0.0.1:8000/api/health/                                   # nurse api
 curl -fsS http://127.0.0.1:8080/api/placements/count/                         # should be ~60000
-systemctl is-active nginx leaves postgresql
-docker compose -p stages ps; docker compose -p nurse ps
+systemctl is-active nginx leaves nurse-api postgresql
+docker compose -p stages ps        # stages is the only containerised app
 ```
 
 All three answer, `placements` holds the seeded volume, every container reports
@@ -821,8 +890,9 @@ cd ~/breakfix-lab && lab list      # the catalogue, nothing passed yet
 Shut down and snapshot as **`deployed`**.
 
 `deployed` means: everything in `clean`, plus all three applications running and
-seeded, the host nginx in front of them, TLS in place, and `lab.conf` filled in
-with your real `LAB_LAN_IP`. This is the snapshot almost every challenge expects,
+seeded — `stages` in containers, `leaves` and `nurse` under systemd — the host
+nginx in front of them, TLS in place, and `lab.conf` filled in with your real
+`LAB_LAN_IP`. This is the snapshot almost every challenge expects,
 and the one you roll back to after an irreversible break.
 
 ---
@@ -839,7 +909,7 @@ and the one you roll back to after an irreversible break.
 | **`s4-06`** | `deployed` | **Snapshot *and* hypervisor console required.** `RISK=irreversible`: you will lose SSH on purpose. `break.sh` makes you type `yes-i-have-console` |
 | `s5-01` … `s5-06`, `s5-08`, `s5-09` | `deployed` | Reversible. `reset.sh` undoes each one |
 | **`s5-07`** | `deployed` | **Snapshot required.** `RISK=irreversible`: a bad UUID in `/etc/fstab` boots the VM to emergency mode. Two-phase check — `check.sh --arm` before the reboot, `check.sh` after |
-| `s6-01` … `s6-04`, `s6-06` | `deployed` | s6-01 needs the second disk from section 2, and the apps must keep serving throughout |
+| `s6-01` … `s6-04`, `s6-06`, `s6-07` | `deployed` | s6-01 needs the second disk from section 2, and the apps must keep serving throughout. s6-02 and s6-07 containerise `leaves` and `nurse`; change that app's mode in `lab.conf` when you pass one |
 | `s6-05` | `clean` | Ansible rebuilds from near-bare. The final proof — "a fresh VM reaches a working state from the playbook alone" — needs a **new VM**, not a snapshot |
 | `s7-01` … `s7-06` | `deployed` | "Off-VM" is always simulated locally: a second container, a separate mount, or a second VM. Never a real cloud account |
 | **`s7-07`** | `deployed` | **Snapshot required.** `RISK=irreversible`: the fake uploads are scrambled and local backups removed |

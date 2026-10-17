@@ -75,24 +75,77 @@ ping -c1 stages.lab.invalid && nc -vz stages.lab.invalid 22
 Do them in this order, and **verify each before starting the next**. If you
 build all three and then test, you will not know which one broke what.
 
-1. **`stages`** — SETUP.md §5. The long one. After `--wait` returns, all three
-   services must read `(healthy)`. Then run the four topology proofs and the
-   three refuse-to-start proofs in that section; they are the reason the stand-in
-   exists, and they are the parts most likely to disagree with my assumptions.
-2. **`leaves`** — SETUP.md §6. Note the `sudo bash -c` wrapper around the
-   management commands: the env file is root-only on purpose.
-3. **`nurse`** — SETUP.md §7. Run the `ls -1` check *first*: if the repo ships a
-   compose file, use it; if the Dockerfile layout differs, fix the paths before
-   building rather than after.
+Only `stages` is containerised. `leaves` and `nurse` both run as gunicorn under
+systemd, because that is what their own deployment documents describe and
+neither repository ships a Dockerfile. Containerising them is s6-02 and s6-07,
+as graded exercises.
+
+### 3a. Read each repository's own deployment docs first — a gate, not a nicety
+
+**Before starting §6 and before starting §7**, read the repository's own
+documentation and reconcile it with mine. `SETUP.md` is my summary of
+documentation written by someone else; **where they disagree, the repository
+wins.**
+
+```bash
+# leaves, before SETUP.md §6
+cd /opt/leaves
+sed -n '1,120p' README_VPS.md
+sed -n '1,80p'  README_POSTGRESQL.md
+ls -1 render.yaml build.sh 2>&1
+
+# nurse, before SETUP.md §7
+cd /opt/nurse
+sed -n '1,100p' deployment/QUICK_START.md
+sed -n '1,150p' deployment/setup_vps.sh        # read it; do not run it blind
+sed -n '1,100p' deployment/CONFIG_TEMPLATES.md
+sed -n '1,120p' settings_production.py         # the authority on what it reads
+ls -1 render.yaml build.sh deployment/ 2>&1
+```
+
+For each app, write down before you build it:
+
+| Question | From the repo | From SETUP.md | Which did you follow |
+| --- | --- | --- | --- |
+| WSGI entry point | | `leave_management_project.wsgi` / `config.wsgi` | |
+| Settings module | | `settings_production` for nurse | |
+| Environment variable names | | `SECRET_KEY`, `DEBUG`, `DATABASE_URL`, `ALLOWED_HOSTS` | |
+| Where config is expected to live | | `/etc/leaves/leaves.env`, `/etc/nurse/nurse.env` | |
+| Bind address and port | | `127.0.0.1:8081`, `127.0.0.1:8000` | |
+| Static files / frontend build | | `collectstatic`; `npm run build` to `frontend/dist` | |
+| What `build.sh` does | | seeds `rh_admin` (leaves) | |
+
+**Report every disagreement, even the ones you resolved.** A guess that happens
+to work is worse than a disagreement you can see, because it survives silently
+into every challenge built on top of it. If `setup_vps.sh` does most of §7
+properly, use it and tell me — §7 should then be rewritten to defer to it rather
+than duplicate it.
+
+### 3b. Then build them
+
+1. **`stages`** — SETUP.md §5. The long one, and the only containerised app.
+   After `--wait` returns, all three services must read `(healthy)`. Then run the
+   four topology proofs and the three refuse-to-start proofs in that section;
+   they are the reason the stand-in exists, and the parts most likely to disagree
+   with my assumptions.
+2. **`leaves`** — SETUP.md §6, after 3a. Note the `sudo bash -c` wrapper around
+   the management commands: the env file is root-only on purpose.
+3. **`nurse`** — SETUP.md §7, after 3a. Two unit-of-work questions to settle from
+   its own docs: whether `setup_vps.sh` replaces most of the section, and whether
+   the frontend build needs a pinned Node version. The API is a unit
+   (`nurse-api.service`); the frontend is static files served by the host nginx.
 
 After each one, the matching line of this must answer:
 
 ```bash
-curl -fsS http://127.0.0.1:8080/api/health/ ; echo    # stages
+curl -fsS http://127.0.0.1:8080/api/health/ ; echo    # stages  (compose)
 curl -fsS -o /dev/null -w 'leaves %{http_code}\n' http://127.0.0.1:8081/etoile-formation-conge/
-curl -fsS http://127.0.0.1:8000/api/health/ ; echo    # nurse api
+curl -fsS http://127.0.0.1:8000/api/health/ ; echo    # nurse api (systemd)
 curl -fsS -o /dev/null -w 'nurse web %{http_code}\n' http://127.0.0.1:3000/
 ```
+
+The last one needs the nginx block from §8, so it will fail until then. That is
+expected, not a fault.
 
 ---
 
@@ -132,7 +185,7 @@ lab reset s3-06-works-until-reboot
 ```
 
 Expected: the check **fails** before the fix with nurse unreachable, and after
-you set `restart: unless-stopped` and recreate, it passes with
+you `systemctl enable nurse-api` again, it passes with
 `it started with the machine (Ns after boot)`. The assertion I am least sure of
 is that start-time-against-boot-time comparison — record the exact numbers it
 prints, pass or fail.
@@ -141,13 +194,16 @@ prints, pass or fail.
 
 ```bash
 lab start s5-04-api-keeps-dying             # type yes
-docker inspect -f '{{.RestartCount}}' "$(cd /opt/nurse && docker compose ps -q api)"
+systemctl show -p NRestarts -p MemoryMax --value nurse-api
+systemctl status --no-pager -l nurse-api | tail -5
 sudo dmesg -T | grep -iE 'oom|killed' | tail -5
 lab check s5-04-api-keeps-dying             # 3 minutes of watching, then fails
-# fix it, then:
+# fix it (remove the drop-in, or raise it), then:
 lab check s5-04-api-keeps-dying
 lab reset s5-04-api-keeps-dying
 ```
+
+The limit lives in `/etc/systemd/system/nurse-api.service.d/90-lab.conf`.
 
 Two things to record, because the whole design rests on them: whether the OOM
 line says **`Memory cgroup out of memory`** and names the api's cgroup, and
@@ -222,7 +278,7 @@ systemctl status --no-pager -l <unit>
 journalctl -u <unit> -n 60 --no-pager
 systemctl show -p FragmentPath -p EnvironmentFiles -p MainPID -p NRestarts <unit>
 
-# --- a compose stack (stages, nurse)
+# --- a compose stack (stages only, as built)
 cd /opt/<app> && docker compose ps -a
 docker compose logs --tail 80 <service>
 docker compose config | head -40
@@ -255,22 +311,35 @@ I fixed what was clearly wrong. These are the places I could not fix from here,
 so look hardest at them:
 
 1. **The two public repos.** Every claim about `leaves`' and `nurse`' layout —
-   WSGI paths, model names, migration heads, `build.sh`, `create_default_superuser`,
-   whether a Dockerfile exists where the compose file expects it — comes from what
-   you told me, not from reading them. Each has a verification command next to it;
-   run those rather than trusting the prose.
-2. **`build.sh` in `leaves`.** I do not know what it does beyond seeding
-   `rh_admin`. Read it before running it.
-3. **The nurse frontend build.** `VITE_API_URL` is baked in at build time, and the
-   build arg only works if that repo's Dockerfile declares `ARG VITE_API_URL`. If
-   it does not, the page will come up empty with a perfectly healthy API.
-4. **`seed.sh` on `leaves` and `nurse`.** It fills fields by type after finding the
+   WSGI paths, settings module, environment variable names, model names, migration
+   heads, `build.sh`, `create_default_superuser` — comes from what you told me,
+   not from reading them. §3a is the gate for this, and it is the single most
+   valuable half-hour of the session.
+2. **`deployment/setup_vps.sh` in `nurse`.** It probably does most of §7, and
+   better, since it was written against the actual code. If so, §7 should defer
+   to it instead of duplicating it. Read it; tell me what it covers.
+3. **`build.sh` in `leaves`** and **`build.sh` in `nurse`.** I do not know what
+   either does. Read before running.
+4. **The nurse frontend build.** `VITE_API_URL` must be set in the environment of
+   `npm run build`, and it is baked into the bundle. If the repo reads a different
+   variable name, the page comes up empty with a perfectly healthy API — the
+   `grep -ro 'theses.lab.invalid' dist/assets/` in §7 is there to catch exactly
+   that before you discover it in a browser.
+5. **`seed.sh` on `leaves` and `nurse`.** It fills fields by type after finding the
    model. Unique constraints beyond `Thesis.numero`, required foreign keys with no
    rows to point at, or custom validators will stop it. It prints what it found
    and stops rather than guessing.
-5. **`s5-04`'s determinism**, as above.
-6. **`s5-07` reaching emergency mode at all.** An fstab entry with `defaults` on a
+6. **`s5-04`'s determinism**, as above. It now runs against a systemd unit
+   rather than a container, so the limit is a `MemoryMax=` drop-in and the OOM
+   line should name `nurse-api.service`'s cgroup.
+7. **`s5-07` reaching emergency mode at all.** An fstab entry with `defaults` on a
    non-root mount *should* be a hard dependency of `local-fs.target`. If 24.04
    does something gentler, the challenge needs rewriting.
-7. **The `clean` snapshot's `lab.conf`** is the unedited copy — `LAB_LAN_IP` is
+8. **`s3-02` changed hands.** It was verified against a mock `docker compose`,
+   but `nurse` now runs under systemd, so the branch that will execute is the
+   untested one — a restart that re-reads the `EnvironmentFile` rather than a
+   container recreate. It is cheap to try if you have ten minutes spare after the
+   three above: `lab start s3-02-theses-api-down`, fix the port in
+   `/etc/nurse/nurse.env`, `lab check`. Not required this session.
+9. **The `clean` snapshot's `lab.conf`** is the unedited copy — `LAB_LAN_IP` is
    empty in it. If you roll back to `clean`, redo §4 before §5.

@@ -63,7 +63,16 @@ with a staff area.
   the browser.
 
 **In my lab** all three run on one Ubuntu 24.04 VM behind one host nginx, with fake
-data only.
+data only. **Only `stages` is containerised.** Neither public repository ships a
+Dockerfile or a compose file — `leaves` has `render.yaml` and `README_VPS.md`,
+`nurse` has `render.yaml`, `build.sh` and `deployment/setup_vps.sh` with a
+`settings_production.py` — and both describe gunicorn deployments, so both run as
+gunicorn under systemd. Containerising them is s6-02 and s6-07.
+
+**Each repository is the authority on its own deployment.** `SETUP.md` §6 and §7
+are a summary of documentation written by someone else; where the two disagree,
+the repository wins and the disagreement gets written down rather than guessed
+at.
 
 **Development happens on Parrot; the lab VM is Ubuntu 24.04.** Where the two
 differ — package names, `ssh.socket` socket activation, the default `ufw` state —
@@ -269,10 +278,12 @@ Design notes:
 - **`RUN_MODE` is a default, not a global.** The lab does not run all three apps
   the same way, and cannot: s6-02 is a mission to *containerise* `leaves`, which
   is only possible if `leaves` starts life as gunicorn under systemd, while s4-04
-  needs `nurse` to have a genuinely published container port to argue about. So
-  `lab.conf` carries `STAGES_MODE`, `LEAVES_MODE` and `NURSE_MODE`, each falling
-  back to `RUN_MODE` when unset, and `lib/svc.sh` resolves the mode **per app**
-  rather than once. A challenge that touches two apps may therefore be talking to
+  needs an app with genuinely published container ports. So `lab.conf` carries
+  `STAGES_MODE`, `LEAVES_MODE` and `NURSE_MODE`, each falling back to `RUN_MODE`
+  when unset, and `lib/svc.sh` resolves the mode **per app** rather than once.
+  As built, only `stages` is containerised: neither public repository ships a
+  Dockerfile or a compose file, so `leaves` and `nurse` both run as gunicorn
+  under systemd, which is what their own deployment documents assume. A challenge that touches two apps may therefore be talking to
   systemd and to compose in the same script, and must not assume otherwise.
   (This replaces the single global `RUN_MODE` of the original §3: s3-01's own
   break description — "corrupt the `ExecStart` path, *or* in compose mode set the
@@ -458,9 +469,11 @@ work in both `compose` and `systemd` mode.
 - **s4-03 Browsers warn about the certificate** (L3) — *break:* swap in an expired
   self-signed certificate. *Check:* TLS handshake succeeds, the certificate has
   more than 14 days left, and HTTPS returns 200.
-- **s4-04 Docker goes around the firewall** (L3, nurse) — *mission:* publish a
+- **s4-04 Docker goes around the firewall** (L3, stages) — *mission:* publish a
   container port, deny it in ufw, and prove from the VM's LAN address that it is
-  still reachable. Then fix it two ways: bind to `127.0.0.1` behind nginx, and
+  still reachable. It targets `stages` because that is the only containerised app
+  in the lab as built — see §1 — and therefore the only one with real published
+  ports to argue about. Then fix it two ways: bind to `127.0.0.1` behind nginx, and
   filter in the `DOCKER-USER` chain. *Check:* the denied port is genuinely
   unreachable while the app still works through nginx.
 - **s4-05 Raise the hardening score** (L2, mission) — run `lynis audit system`,
@@ -533,6 +546,21 @@ work in both `compose` and `systemd` mode.
   hardening, firewall, Docker, nginx, the three apps, backups and monitoring.
   *Check:* a second run reports `changed=0`, and a fresh VM reaches a working state
   from the playbook alone.
+- **s6-07 Containerise the theses app** (L3, nurse) — a `Dockerfile` for the API,
+  a build for the frontend, and a `compose.yaml` with PostgreSQL, a named volume,
+  an env file and healthchecks. *Check:* destroy the containers, bring them back,
+  and the data is still there; the API answers on the same port it did under
+  systemd; and `NURSE_MODE` flipped to `compose` leaves every challenge that
+  touches nurse still passing.
+
+  **Why this exists.** The original plan had setup containerise `nurse`, which
+  assumed a Dockerfile the repository does not have: `nurse` ships `render.yaml`,
+  `build.sh` and `deployment/setup_vps.sh` with a `settings_production.py`, all
+  of which describe a gunicorn deployment. Writing an API Dockerfile, a frontend
+  build and a compose file untested, in the middle of a first VM run, is a bad
+  trade — and containerising an application is worth doing as a graded exercise
+  with a check on it rather than invisibly during setup. The same reasoning
+  already applied to `leaves` in s6-02; this extends it to the second repo.
 - **s6-06 Deploy by tag, and roll back** (L3) — put the lab apps on git tags,
   deploy by naming a tag, then roll back to the previous tag. *Check:* the running
   version matches the tag, rollback restores the old behaviour, and no step used

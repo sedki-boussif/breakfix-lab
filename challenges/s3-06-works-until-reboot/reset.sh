@@ -26,8 +26,10 @@ if [[ "$(svc_mode nurse)" == "compose" ]]; then
   fi
   svc_compose nurse up -d >/dev/null 2>&1 || true
 else
-  lab_as_root systemctl enable --now "$(svc_name nurse api)" >/dev/null 2>&1 || true
-  lab_as_root systemctl enable --now "$(svc_name nurse web)" >/dev/null 2>&1 || true
+  for u in "$(svc_name nurse api)" "${NURSE_WEB_UNIT:-}"; do
+    [[ -n "$u" ]] || continue
+    lab_as_root systemctl enable --now "$u" >/dev/null 2>&1 || true
+  done
 fi
 
 rm -f "$(lab_state_dir "$ID")/armed"

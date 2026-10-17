@@ -27,3 +27,12 @@ invites and which changes nothing.
 
 **Level 2.** One cause, one configuration value, but the symptom points at the
 wrong layer and the obvious response to the ticket is destructive.
+
+**Why `PROVEN=unproven` despite having been tested.** It was verified end to end
+against a mock `docker compose`, including the trap — but `nurse` now runs as
+gunicorn under systemd, because neither public repository ships a Dockerfile.
+The branch that will actually execute on the VM is therefore the systemd one,
+which restarts the unit so it re-reads its `EnvironmentFile` rather than
+recreating a container. That branch has not been run. The compose branch stays
+for after s6-07, and the field records the path in use rather than the path that
+was convenient to test.

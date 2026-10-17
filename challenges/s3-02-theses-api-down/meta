@@ -6,4 +6,4 @@ APPS=nurse
 NEEDS=
 SNAPSHOT=deployed
 RISK=
-PROVEN=mock-compose
+PROVEN=unproven

@@ -32,8 +32,12 @@ if [[ "$(svc_mode nurse)" == "compose" ]]; then
   } >"$override"
   svc_compose nurse up -d >/dev/null 2>&1 || true
 else
-  lab_as_root systemctl disable "$(svc_name nurse api)" >/dev/null 2>&1 || true
-  lab_as_root systemctl disable "$(svc_name nurse web)" >/dev/null 2>&1 || true
+  # The built frontend is static files served by the host nginx, so NURSE_WEB_UNIT
+  # may legitimately be empty: there is nothing to start at boot.
+  for u in "$(svc_name nurse api)" "${NURSE_WEB_UNIT:-}"; do
+    [[ -n "$u" ]] || continue
+    lab_as_root systemctl disable "$u" >/dev/null 2>&1 || true
+  done
 fi
 
 lab_state_set "$ID" BROKEN_AT "$(date +%s)"

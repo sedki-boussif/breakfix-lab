@@ -35,9 +35,13 @@ fi
 
 assert_service "the api service is running" nurse api
 
-# It survives the service being recreated, so the fix is in the environment
-# file rather than in a container that happens to be running.
-svc_compose nurse up -d --force-recreate "$(svc_name nurse api)" >/dev/null 2>&1 || true
+# It survives the service being restarted from scratch, so the fix is in the
+# environment file rather than in a process that happens to be running.
+if [[ "$(svc_mode nurse)" == "compose" ]]; then
+  svc_compose nurse up -d --force-recreate "$(svc_name nurse api)" >/dev/null 2>&1 || true
+else
+  svc_restart nurse api >/dev/null 2>&1 || true
+fi
 assert_eventually "it is still healthy after the api is recreated" 90 \
   curl -fsS -o /dev/null --max-time 5 "$health"
 

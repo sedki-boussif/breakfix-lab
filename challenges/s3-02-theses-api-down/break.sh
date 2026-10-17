@@ -25,8 +25,13 @@ if grep -qE '^DATABASE_URL=.*:5432/' "$env_file"; then
   lab_as_root sed -i -E 's|^(DATABASE_URL=.*):5432/|\1:5433/|' "$env_file"
 fi
 
-# Recreate rather than restart: the environment file is read when the container
-# is created, so a plain restart would keep the old value and hide the fault.
-svc_compose nurse up -d --force-recreate "$(svc_name nurse api)" >/dev/null 2>&1 || true
+# Make the service read the file again. Under systemd a restart re-reads the
+# EnvironmentFile; under compose the environment is fixed when the container is
+# created, so a plain restart would keep the old value and hide the fault.
+if [[ "$(svc_mode nurse)" == "compose" ]]; then
+  svc_compose nurse up -d --force-recreate "$(svc_name nurse api)" >/dev/null 2>&1 || true
+else
+  svc_restart nurse api >/dev/null 2>&1 || true
+fi
 
 lab_state_set "$ID" BROKEN_AT "$(date +%s)"

@@ -9,12 +9,17 @@
 RUN_MODE="compose"            # the default, for anything without its own mode
 
 # The lab does not run all three apps the same way, on purpose:
-#   stages  ships its own compose.yaml (the stand-in)
-#   leaves  starts as gunicorn under systemd, so s6-02 has work to do
-#   nurse   runs in containers, so s4-04 has a published port to argue about
+#   stages  ships its own compose.yaml, because this repo wrote it — and it is
+#           therefore the app s4-04 uses, being the only one with genuinely
+#           published container ports
+#   leaves  gunicorn under systemd, which is what its own README_VPS.md assumes
+#   nurse   gunicorn under systemd too, which is what its deployment/ docs
+#           assume. Neither public repo ships a Dockerfile or a compose file, so
+#           containerising them is a graded mission (s6-02, s6-07) rather than
+#           something setup does for you invisibly and untested.
 STAGES_MODE="compose"
 LEAVES_MODE="systemd"
-NURSE_MODE="compose"
+NURSE_MODE="systemd"
 
 # --- the three apps ---------------------------------------------------------
 # STAGES_DIR points at the stand-in app by default (see stages-lab/README.md).
@@ -22,7 +27,7 @@ NURSE_MODE="compose"
 STAGES_DIR="/opt/stages";  STAGES_URL="http://127.0.0.1:8080/"
 LEAVES_DIR="/opt/leaves";  LEAVES_URL="http://127.0.0.1:8081/etoile-formation-conge/"
 NURSE_DIR="/opt/nurse";    NURSE_API="http://127.0.0.1:8000/api/health/"
-NURSE_WEB="http://127.0.0.1:3000/"
+NURSE_WEB="http://127.0.0.1:3000/"           # the host nginx block serving dist/
 DB_SERVICE="db"
 BACKUP_DIR="/var/backups/lab"
 
@@ -36,7 +41,9 @@ NURSE_PROJECT="nurse";   NURSE_WEB_SVC="web"; NURSE_API_SVC="api"
 # Unit name per app and role. Only read when RUN_MODE="systemd".
 STAGES_WEB_UNIT="stages-web.service"; STAGES_API_UNIT="stages-api.service"
 LEAVES_WEB_UNIT="leaves.service";     LEAVES_API_UNIT="leaves.service"
-NURSE_WEB_UNIT="nurse-web.service";   NURSE_API_UNIT="nurse-api.service"
+# Empty on purpose: the built frontend is static files served by the host
+# nginx, so there is no unit for it. Set it if you containerise nurse in s6-07.
+NURSE_WEB_UNIT="";   NURSE_API_UNIT="nurse-api.service"
 DB_UNIT="postgresql.service"
 NGINX_UNIT="nginx.service"
 
@@ -81,7 +88,7 @@ NURSE_WSGI="config.wsgi:application"
 LEAVES_ENV="/etc/leaves/leaves.env"          # EnvironmentFile= of the unit
 LEAVES_STATIC_ROOT="/opt/leaves/staticfiles" # STATIC_ROOT after collectstatic
 LEAVES_CSS="static/admin/css/base.css"       # relative to LEAVES_URL; Django always ships it
-NURSE_ENV="/opt/nurse/.env"                  # env_file: of the compose stack
+NURSE_ENV="/etc/nurse/nurse.env"             # EnvironmentFile= of the unit
 NURSE_LIST="http://127.0.0.1:8000/api/theses/"   # the list endpoint; confirm the route
 STAGES_UPLOADS_VOLUME="stages_uploads"       # docker volume name, from `docker volume ls`
 DEV_USER="dev1"                              # the over-privileged account in s3-07

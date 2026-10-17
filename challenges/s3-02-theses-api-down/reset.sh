@@ -16,5 +16,10 @@ lab_guard
 
 ID='s3-02-theses-api-down'
 lab_restore_file "$ID" "${NURSE_ENV:?}"
-svc_compose nurse up -d --force-recreate "$(svc_name nurse api)" >/dev/null 2>&1 || true
+if [[ "$(svc_mode nurse)" == "compose" ]]; then
+  svc_compose nurse up -d --force-recreate "$(svc_name nurse api)" >/dev/null 2>&1 || true
+else
+  lab_as_root systemctl reset-failed "$(svc_name nurse api)" >/dev/null 2>&1 || true
+  svc_restart nurse api >/dev/null 2>&1 || true
+fi
 lab_state_set "$ID" BROKEN_AT 0
