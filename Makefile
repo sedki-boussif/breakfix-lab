@@ -29,6 +29,20 @@ lint:
 > # containing a dash it did not expect.
 > LC_ALL=C.UTF-8 shellcheck -x -P $(CURDIR) $(SCRIPTS)
 > echo "shellcheck: clean across $(words $(SCRIPTS)) scripts"
+> # The whole repo relies on these three lines being present. Remembering to
+> # add them is not a guarantee; failing the build when they are missing is.
+> missing=0; n=0
+> for f in $(SCRIPTS); do
+>   n=$$((n+1))
+>   head -1 "$$f" | grep -qx '\#!/usr/bin/env bash' || {
+>     echo "  $$f: first line is not #!/usr/bin/env bash"; missing=1; }
+>   grep -qx 'set -euo pipefail' "$$f" || {
+>     echo "  $$f: missing set -euo pipefail"; missing=1; }
+>   grep -qx 'shopt -s inherit_errexit' "$$f" || {
+>     echo "  $$f: missing shopt -s inherit_errexit (errexit does not reach inside \$$(...))"; missing=1; }
+> done
+> (( missing == 0 )) || { echo "shell options: FAILED"; exit 1; }
+> echo "shell options: all $$n scripts set the shebang, errexit and inherit_errexit"
 
 selftest:
 > @fail=0; n=0; proven=""
@@ -58,7 +72,15 @@ selftest:
 >   proven+="$$(. "$$d/meta"; echo "$$PROVEN $$id")"$$'\n'
 > done
 > (( fail == 0 )) || exit 1
+> opts=0; total=0
+> for f in bin/lab lib/*.sh challenges/*/*.sh; do
+>   total=$$((total+1))
+>   if grep -qx 'set -euo pipefail' "$$f" && grep -qx 'shopt -s inherit_errexit' "$$f"; then
+>     opts=$$((opts+1))
+>   fi
+> done
 > echo "selftest: $$n challenges, all well-formed, all with a solution"
+> echo "options:  $$opts of $$total scripts set errexit and inherit_errexit"
 > echo "verified:"
 > cut -d' ' -f1 <<<"$$proven" | grep -v '^$$' | sort | uniq -c | sort -rn \
 >   | awk '{printf "  %4d  %s\n", $$1, $$2}'

@@ -1,0 +1,6 @@
+Two reports, two different symptoms, and the second appeared only after the first was fixed. Treat that as information: a fault in front can hide a fault behind it, and "it worked, now there is a new error" usually means you have uncovered the second one rather than caused it.
+Start where the first symptom was: nginx would not start. `sudo nginx -t` and `journalctl -u nginx -n 30` say why, and the message names a file and a line number.
+With nginx answering, the 502 is the second fault, and a 502 means nginx asked an upstream and got nothing. Check the leave service and then what it depends on: `systemctl status leaves` and `journalctl -u leaves -n 30`.
+The leave app cannot reach its database. `systemctl status postgresql` and `sudo -u postgres pg_isready` say whether the database is running at all.
+Fix both, in this order: the config so nginx starts, then the database so the app can serve. Then re-read the first report — "the server is off" was a reasonable inference from a connection refused and it was wrong, which is worth remembering the next time you receive it.
+Check all three applications at the end, not just the one that was reported. A multi-fault incident is exactly where a third problem hides.

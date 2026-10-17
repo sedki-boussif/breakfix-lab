@@ -71,6 +71,23 @@ the scripts target **Ubuntu 24.04**, and `SETUP.md` says so. Anything that needs
 the lab marker to be present is verified in a disposable `ubuntu:24.04`
 container, never on the development machine.
 
+**What must not be tested on the development machine at all.** A container's
+writable layer is the host's disk, so a container is *not* isolation for disk
+space. A challenge is written, linted, reasoned about, marked `PROVEN=unproven`
+and listed for the VM — never container-tested — when its break:
+
+- writes more than a few hundred megabytes, or
+- creates, formats or unmounts a filesystem outside a bounded loop image, or
+- touches `/etc/fstab`, the boot path, or anything that decides whether the
+  machine comes up.
+
+This is not caution for its own sake: a loopback mount failed inside a container,
+the break fell back to the filesystem underneath, and roughly 310 GB landed on
+the development machine's root volume before the container was stopped. The
+guards added since would now refuse — and the policy stands anyway, because the
+next hole will be somewhere else. s5-07, which boots the VM to emergency mode,
+cannot be container-tested in any form.
+
 ---
 
 ## 2. Safety rules (non-negotiable)
@@ -123,6 +140,14 @@ is a bug, not a feature.
    must verify that path**, and the caller must verify it again. Belt and braces,
    because `errexit` is not a safety mechanism — it is a convenience, and it has
    at least one hole in it per shell.
+
+   **`make lint` fails if any script under `bin/`, `lib/` or `challenges/` is
+   missing the shebang, `set -euo pipefail` or `shopt -s inherit_errexit`**, and
+   `make selftest` reports the count. Having remembered to add three lines is not
+   a guarantee; a build that refuses without them is. A new challenge that forgets
+   either one fails the build rather than slipping through — the same reasoning as
+   the positive control on an absence assertion: a guarantee nobody verifies is
+   not a guarantee.
 10. **Idempotent.** Running `break.sh` twice does not deepen the damage; running
     `reset.sh` twice is harmless.
 
@@ -293,13 +318,21 @@ move on. But where the shortcut is obvious — `chmod 777`, `DEBUG=True`, "any
 database rather than the right database", a `NOPASSWD` entry broader than it
 needs to be — the check refuses it, and the brief never hints that it will.
 
-**A check must terminate.** Any command in a `check.sh` that can block
-indefinitely — a scan of every process's open files, a network call without a
-deadline, a lock it might wait on — is either wrapped in `timeout` or replaced
-with something that cannot hang. A check that hangs is worse than one that fails:
-a failure is information, and a hang is a drill abandoned twenty minutes in. An
-`lsof +L1` scan in s5-03 hung for twenty minutes during testing and was replaced
-by reading `/proc/*/fd` directly, which needs no external tool and cannot block.
+**A check must terminate, and the library enforces it.** Every assertion in
+`lib/assert.sh` runs under a hard deadline — `ASSERT_TIMEOUT`, 30 seconds by
+default — and a deadline reached is reported as `FAIL … assertion timed out`
+rather than left to hang. A hang is worse than a failure: a failure is
+information, a hang is a drill abandoned twenty minutes in.
+
+This is mechanical rather than advisory on purpose. An `lsof +L1` scan in s5-03
+hung for twenty minutes during testing *after* a rule saying checks must
+terminate had already been written down. The rule did not stop it; a deadline
+does. Prefer a primitive that cannot block anyway — s5-03 now reads `/proc/*/fd`
+directly rather than calling `lsof` — but do not rely on having remembered to.
+
+Detectors and planters passed to `assert_absent` run in a subshell, so they
+inherit the caller's functions and variables but cannot hand variables back:
+anything that must persist goes to a file.
 
 **Every absence assertion carries a positive control.** Where `check.sh` claims
 something is *gone* — no process holds the deleted file, the memory hog is
@@ -319,6 +352,16 @@ real SC2318 — and an absence assertion has to earn its own.
 <clean_fn>` for this. A *measurement* is not an absence claim: "disk usage is
 under 80%" needs no control, because the number is read directly. "The file that
 filled it is gone" does.
+
+**And a positive claim is its own evidence.** "The job succeeds under `env -i`",
+"the process listening on this port is the service" — these are stronger than the
+absence claims they imply, and they need no control. Do not dress one up as an
+absence assertion: **the control must be planted in the real subject's own
+domain, or the assertion proves only that the detector works**. Two checks in
+Stage 5 were written that way and had to be rewritten — s5-06's pointed its
+detector at a spare port and passed while a squatter held the real one, which is
+a vacuous PASS wearing a control as a disguise. If the control cannot be planted
+where the real claim lives, the claim probably wants to be positive.
 
 **Vary the reporter.** Briefs written in a batch drift into one voice, and a
 catalogue where every ticket sounds the same trains you to read tickets you will

@@ -83,6 +83,10 @@ NURSE_LIST="http://localhost:8000/api/theses/"   # the list endpoint; confirm th
 STAGES_UPLOADS_VOLUME="stages_uploads"       # docker volume name, from `docker volume ls`
 DEV_USER="dev1"                              # the over-privileged account in s3-07
 
+# How long any single assertion may take before it is failed as timed out.
+# A hang is a drill abandoned; a failure is information. Raise it on a slow VM.
+ASSERT_TIMEOUT="30"
+
 # --- bounded filesystems for the stage 5 resource drills --------------------
 # The exhaustion challenges run on their own loopback filesystems so a break
 # cannot fill a volume that matters, and so reset is a reformat rather than a
@@ -100,6 +104,13 @@ S5_MEM_FLOOR_MB="256"                        # s5-04: a memory limit below this 
 S5_HOG_MB="256"                              # s5-04: the red herring, bounded so it cannot eat the host
 S5_HOG_NAME="indexer-warmup"                 # s5-04: the name it runs under
 S5_SPIN_NAME="apt-cache-gen"                 # s5-05: the name the loops run under
+LEAVES_PORT="8081"                           # s5-06: the port the service must own
+S5_DECOY_NAME="telemetry-agent"              # s5-06: the name the squatter runs under
+NGINX_SITE="/etc/nginx/sites-available/lab"  # s5-08: the host nginx site file
+LAB_JOB_DIR="/opt/lab-jobs"                  # s5-09: where the nightly job lives
+LAB_JOB_OUT="/var/lib/lab-jobs/report.csv"   # s5-09: what it is supposed to produce
+LAB_JOB_MAX_AGE_H="30"                       # s5-09: older than this is "stopped"
+FSTAB="/etc/fstab"                           # s5-07: named so nothing hard-codes it
 
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"

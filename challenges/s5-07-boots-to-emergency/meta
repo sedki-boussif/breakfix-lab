@@ -1,0 +1,9 @@
+STAGE=5
+TYPE=incident
+TITLE="The VM boots to emergency mode"
+LEVEL=4
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=irreversible
+PROVEN=unproven

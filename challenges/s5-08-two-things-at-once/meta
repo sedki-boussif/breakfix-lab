@@ -1,0 +1,9 @@
+STAGE=5
+TYPE=incident
+TITLE="Two things at once"
+LEVEL=4
+APPS=leaves
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-systemd
