@@ -161,6 +161,7 @@ Create exactly this tree. Keep every script small enough to read in one screen.
 breakfix-lab/
   README.md               what this is, how to set up the VM, the rules of the game
   SETUP.md                building the lab VM and deploying the 3 apps with fake data
+  FIRST-RUN.md            SETUP.md in session order: gates, snapshots, what to capture
   CLAUDE.md               the standing rules (see §9)
   Makefile                lint (shellcheck), test (run every check against a clean VM)
   lab.conf.example        URLs, service names and paths; copied to lab.conf and edited

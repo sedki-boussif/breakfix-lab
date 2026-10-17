@@ -26,6 +26,11 @@ be dropped in later without touching a single challenge.
 host nginx, the three apps, fake data, and the snapshots the challenges expect.
 Do that first — the lab assumes a VM it is allowed to destroy.
 
+**For the first run, follow `FIRST-RUN.md` instead**, which is `SETUP.md` in
+session order: what to have ready, where to stop and prove something before
+continuing, where the two snapshots go, which challenges to validate once the
+apps are up, and what to capture when a step fails.
+
 Then:
 
 ```bash

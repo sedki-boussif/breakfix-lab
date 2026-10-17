@@ -64,14 +64,28 @@ partitions and no filesystem.
 
 ## 3. Base install, then the `clean` snapshot
 
+**Which user you are, for the whole of the rest of this file.** The Ubuntu
+installer already made you an account. Everything below runs as **that account**
+— not as a new `lab` user, and not as root. Wherever this file says `$USER` it
+means the account you are logged in as, and the `docker` group membership in
+step 4 is granted to that account. If you would rather use a dedicated `lab`
+account, create it now, add your key, log in as it, and do everything from
+there; mixing the two is what breaks step 5, because only one of them will be in
+the `docker` group.
+
 ```bash
-# 1. A user with your key, and no password login.
-sudo adduser --disabled-password --gecos "" lab
-sudo usermod -aG sudo lab
-sudo install -d -m 700 -o lab -g lab /home/lab/.ssh
-# paste your public key, from your laptop:
-sudo -u lab tee -a /home/lab/.ssh/authorized_keys < /dev/stdin
-sudo chmod 600 /home/lab/.ssh/authorized_keys
+# 0. Settle it, and keep the answer in front of you.
+whoami; echo "HOME=$HOME"
+```
+
+```bash
+# 1. Your key, if it is not already there from the install.
+#    This command waits for you to paste and then press Ctrl-D. It is not hung.
+install -d -m 700 "$HOME/.ssh"
+cat >> "$HOME/.ssh/authorized_keys"      # paste the public key, then Ctrl-D
+chmod 600 "$HOME/.ssh/authorized_keys"
+# Verify: the key is there and is one line per key.
+wc -l "$HOME/.ssh/authorized_keys"
 ```
 
 ```bash
@@ -83,10 +97,20 @@ sudo sed -i -e 's/^#\?PermitRootLogin.*/PermitRootLogin no/' \
             -e 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' \
             /etc/ssh/sshd_config
 sudo sshd -t && sudo systemctl restart ssh
+
+# VERIFY, and do not skip this. Ubuntu includes /etc/ssh/sshd_config.d/*.conf
+# from the TOP of sshd_config, and the first value wins — so a cloud-image
+# drop-in saying "PasswordAuthentication yes" silently beats the edit above.
+# This prints what sshd will actually do:
+sudo sshd -T | grep -E '^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication)'
+# All three must read: no / no / no. If any says yes, find the override:
+grep -rn -E 'PasswordAuthentication|PermitRootLogin' /etc/ssh/sshd_config.d/ 2>/dev/null
 systemctl is-active ssh.socket    # this is what owns port 22
 ```
 
 Open a **second** SSH session now and confirm it works before closing the first.
+If you cannot, you still have the first session: undo the change rather than
+rebooting.
 
 ```bash
 # 3. Firewall: deny inbound by default, allow only what the lab needs.
@@ -105,7 +129,8 @@ sudo ufw status verbose
 #    challenges expect to find.
 sudo apt install -y ca-certificates curl gnupg git make shellcheck jq \
                     nginx postgresql-16 python3-venv python3-pip \
-                    openssl age restic
+                    openssl age restic \
+                    psmisc lsof e2fsprogs util-linux cron
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
   | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -114,21 +139,43 @@ https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_C
   | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io \
                                        docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker lab        # log out and back in for this to take effect
+# The account YOU are logged in as, not a hypothetical "lab" user.
+sudo usermod -aG docker "$USER"
 ```
+
+**Log out and log back in now.** Group membership is read at login, so until you
+do, every `docker` command in sections 5 and 7 fails with a permission error on
+`/var/run/docker.sock`. Then verify all four, before going any further:
+
+```bash
+id -nG | tr ' ' '\n' | grep -qx docker && echo "docker group: yes" || echo "docker group: NO — log out and in"
+docker version --format '{{.Server.Version}}'     # talks to the daemon as you
+docker compose version
+systemctl is-active docker nginx postgresql
+```
+
+`nginx` and `postgresql` should both be `active` — they start on install. If
+`nginx` is not, `sudo systemctl enable --now nginx` before section 8.
 
 ```bash
 # 5. The lab marker. Nothing in this repo that touches the system will run
 #    without it, and nothing can be flagged or argued into bypassing it.
 echo breakfix-lab | sudo tee /etc/breakfix-lab
+# Verify: exactly this, and nothing else. lab_guard compares it strictly.
+cat -A /etc/breakfix-lab        # must read: breakfix-lab$
 ```
 
 ```bash
 # 6. The lab itself.
-git clone <your fork of this repo> ~/breakfix-lab
+# SUBSTITUTE the URL: this is one of three placeholders in this file that will
+# not work copy-pasted (the other two are the leaves and nurse repositories).
+git clone https://github.com/<you>/breakfix-lab.git ~/breakfix-lab
 cd ~/breakfix-lab && cp lab.conf.example lab.conf
-export PATH="$HOME/breakfix-lab/bin:$PATH"   # add to ~/.bashrc too
+echo 'export PATH="$HOME/breakfix-lab/bin:$PATH"' >> ~/.bashrc
+export PATH="$HOME/breakfix-lab/bin:$PATH"
 make lint && make selftest
+# Verify: both must end in a success line, and `lab list` must print the table.
+lab list | head -3
 ```
 
 ### Take the `clean` snapshot now
@@ -175,8 +222,28 @@ Then map the three invented hostnames to it, on the VM **and on your laptop**:
 192.0.2.25   stages.lab.invalid conge.lab.invalid theses.lab.invalid
 ```
 
-on the VM in `/etc/hosts`, and on your laptop in `/etc/hosts` (or
-`C:\Windows\System32\drivers\etc\hosts`).
+On the VM, with the address you just found:
+
+```bash
+LAN_IP="$(ip -4 addr show scope global | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)"
+echo "using ${LAN_IP}"       # sanity-check it is the one you expect
+printf '%s   stages.lab.invalid conge.lab.invalid theses.lab.invalid\n' "$LAN_IP" |
+  sudo tee -a /etc/hosts
+sed -i "s|^LAB_LAN_IP=.*|LAB_LAN_IP=\"${LAN_IP}\"|" ~/breakfix-lab/lab.conf
+# Verify both:
+getent hosts stages.lab.invalid conge.lab.invalid theses.lab.invalid
+grep LAB_LAN_IP ~/breakfix-lab/lab.conf
+```
+
+On your **laptop**, add the same line by hand to `/etc/hosts` (or
+`C:\Windows\System32\drivers\etc\hosts`), then prove the laptop can reach
+the VM at all before you build anything on it:
+
+```bash
+# from the laptop
+ping -c1 stages.lab.invalid
+nc -vz stages.lab.invalid 22        # SSH is the only port open yet
+```
 
 **It changes when:**
 
@@ -233,9 +300,19 @@ unset OWNER_PW APP_PW
 
 ```bash
 # 3. Build and start. web waits for api to be healthy, api waits for db.
-docker compose up -d --build
-docker compose ps        # all three should reach (healthy), not just Up
+#    This is the slowest step in the file: it downloads Python wheels and an
+#    npm tree, so it needs working internet and takes several minutes on a
+#    2 vCPU VM. If your VM has no outbound access, it fails here and nothing
+#    after this point will work.
+#    --wait blocks until the healthchecks pass, instead of reporting "starting".
+docker compose up -d --build --wait
+docker compose ps        # all three must read (healthy), not Up and not starting
 ```
+
+If `--wait` times out, read the logs of whichever service is not healthy before
+retrying: `docker compose logs api --tail 50` (or `web`, or `db`). A `web` that
+never becomes healthy is almost always the npm build; an `api` that never
+becomes healthy is almost always `.env`.
 
 ```bash
 # 4. Migrate as the OWNER role. The migration also issues the grants that make
@@ -330,10 +407,31 @@ unset LEAVES_PW
 
 ```bash
 # Migrations, static files and the rh_admin seed the repo ships.
-set -a; . /etc/leaves/leaves.env; set +a
-./.venv/bin/python manage.py migrate
-./.venv/bin/python manage.py collectstatic --no-input
-bash build.sh    # or just the rh_admin seeding step from it
+#
+# /etc/leaves/leaves.env is mode 640 root:root, so you CANNOT source it as
+# yourself — `. /etc/leaves/leaves.env` returns "Permission denied". Run the
+# management commands as root with the file loaded, which is also how systemd
+# will run the service:
+sudo bash -c 'set -a; . /etc/leaves/leaves.env; set +a
+  cd /opt/leaves
+  ./.venv/bin/python manage.py migrate
+  ./.venv/bin/python manage.py collectstatic --no-input'
+```
+
+```bash
+# The rh_admin account. build.sh does pip install, collectstatic, migrate and
+# then the seed — the first three you have just done, so read it and run only
+# the seeding part. If it is a single block you cannot separate, running the
+# whole thing again is harmless but slow:
+sed -n '1,40p' /opt/leaves/build.sh      # read it before you run it
+sudo bash -c 'set -a; . /etc/leaves/leaves.env; set +a; cd /opt/leaves && bash build.sh'
+# Verify: the account exists with the HR role.
+sudo bash -c 'set -a; . /etc/leaves/leaves.env; set +a
+  cd /opt/leaves
+  ./.venv/bin/python manage.py shell -c "
+from django.contrib.auth import get_user_model
+u = get_user_model().objects.filter(username=\"rh_admin\").first()
+print(u, getattr(u, \"role\", None))"'
 ```
 
 ```bash
@@ -401,10 +499,19 @@ git clone <the nurse repository> /opt/nurse
 cd /opt/nurse
 ```
 
-If the repo ships a `compose.yaml`, use it. If not, this is the minimum the lab
-expects — api on 8000, web on 3000, both on loopback:
+**First, see what the repo gives you**, because the next block is only for the
+case where it gives you nothing:
 
-```yaml
+```bash
+ls -1 compose.yaml docker-compose.yml Dockerfile frontend/Dockerfile 2>&1
+```
+
+If it ships a compose file, use that and only borrow the ports and healthchecks
+below. If it does not, **write this file yourself** — it is not a diagram, and
+nothing creates it for you:
+
+```bash
+cat > /opt/nurse/compose.yaml <<'YAML'
 name: nurse
 services:
   db:
@@ -436,7 +543,12 @@ services:
     ports: ["127.0.0.1:3000:80"]
 volumes:
   db_data:
+YAML
 ```
+
+`build: .` and `context: ./frontend` assume a `Dockerfile` at the repo root and
+another under `frontend/`. The `ls` above tells you whether that is true; if the
+layout differs, fix the paths here before continuing rather than after.
 
 ```bash
 # Secrets. This app has two real weaknesses, kept on purpose as material for
@@ -452,7 +564,7 @@ CORS_ALLOWED_ORIGINS=https://theses.lab.invalid
 CSRF_TRUSTED_ORIGINS=https://theses.lab.invalid
 EOF
 chmod 600 .env
-docker compose up -d --build
+docker compose up -d --build --wait
 docker compose exec -T api python manage.py migrate
 # This repo ships its own command for the staff account; use it rather than
 # createsuperuser, so the role and defaults it sets are the ones you get.
@@ -544,8 +656,16 @@ server {
 EOF
 sudo ln -sf /etc/nginx/sites-available/lab /etc/nginx/sites-enabled/lab
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
+sudo nginx -t && sudo systemctl enable --now nginx && sudo systemctl reload nginx
+# Verify: the config is valid, nginx is up, and it answers on the vhost names.
+systemctl is-active nginx
+for h in stages.lab.invalid conge.lab.invalid theses.lab.invalid; do
+  printf '%-22s %s\n' "$h" "$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $h" http://127.0.0.1/)"
+done
 ```
+
+All three should answer something other than `000`. A `502` here is expected
+until the app behind that name is up; `000` means nginx is not listening.
 
 TLS comes later: s4-03 is about a certificate that has expired, so issue a
 self-signed certificate with a sane lifetime now (certbot cannot validate a
@@ -560,17 +680,40 @@ sudo openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
 sudo chmod 600 /etc/nginx/tls/lab.key
 ```
 
-Then add `listen 443 ssl;` with `ssl_certificate /etc/nginx/tls/lab.crt;` and
-`ssl_certificate_key /etc/nginx/tls/lab.key;` to each server block, and reload.
-Record in `lab.conf` where the certificate lives so s4-03 can find it.
-
-From your **laptop**, not the VM:
+Now put TLS on all three server blocks. This was prose in an earlier draft and
+had to be hand-edited three times, which is how a verification step ends up
+testing something nobody did — so it is a command:
 
 ```bash
-curl -kfsS -o /dev/null -w '%{http_code}\n' https://stages.lab.invalid/
-curl -kfsS -o /dev/null -w '%{http_code}\n' https://conge.lab.invalid/etoile-formation-conge/
-curl -kfsS -o /dev/null -w '%{http_code}\n' https://theses.lab.invalid/
+# Add the TLS listener to every server block that has a plain one.
+sudo sed -i 's|^    listen 80;|    listen 80;\n    listen 443 ssl;\n    ssl_certificate /etc/nginx/tls/lab.crt;\n    ssl_certificate_key /etc/nginx/tls/lab.key;|' \
+  /etc/nginx/sites-available/lab
+sudo nginx -t && sudo systemctl reload nginx
+# Verify: three listeners on 443, and the certificate's names and dates.
+grep -c 'listen 443 ssl;' /etc/nginx/sites-available/lab     # must print 3
+openssl x509 -in /etc/nginx/tls/lab.crt -noout -subject -enddate -ext subjectAltName
 ```
+
+```bash
+# And record where it lives, so s4-03 can find it.
+sed -i -e 's|^TLS_CERT=.*|TLS_CERT="/etc/nginx/tls/lab.crt"|' \
+       -e 's|^TLS_KEY=.*|TLS_KEY="/etc/nginx/tls/lab.key"|' ~/breakfix-lab/lab.conf
+grep ^TLS_ ~/breakfix-lab/lab.conf
+```
+
+From your **laptop**, not the VM — this is the first time anything has been
+tested from outside, and it is testing three things at once: the laptop's
+`/etc/hosts`, the VM's firewall, and nginx:
+
+```bash
+curl -kfsS -o /dev/null -w 'stages %{http_code}\n' https://stages.lab.invalid/
+curl -kfsS -o /dev/null -w 'leaves %{http_code}\n' https://conge.lab.invalid/etoile-formation-conge/
+curl -kfsS -o /dev/null -w 'nurse  %{http_code}\n' https://theses.lab.invalid/
+```
+
+If all three time out, it is the firewall or the adapter, not nginx — the
+`Host:` loop above already proved nginx answers locally. If one 502s, that app
+is down and the others are fine.
 
 If those answer from the laptop and `ufw status` still shows default deny
 inbound, the arrangement is right.
@@ -583,6 +726,23 @@ inbound, the arrangement is right.
 cd ~/breakfix-lab
 bash lib/seed.sh all
 ```
+
+Verify it actually landed, per app — the seeder prints counts, but check the
+apps agree:
+
+```bash
+curl -fsS http://127.0.0.1:8080/api/placements/count/; echo     # ~60000
+curl -fsS http://127.0.0.1:8000/api/theses/ | head -c 200; echo  # not an empty list
+cd /opt/stages && docker compose exec -T db psql -U stages_owner -d stages \
+  -c "SELECT 'trainees', count(*) FROM trainees
+      UNION ALL SELECT 'placements', count(*) FROM placements
+      UNION ALL SELECT 'audit_log', count(*) FROM audit_log"
+```
+
+If `seed.sh` stops on `leaves` or `nurse` saying it cannot find a model, it
+prints every model it did find: put the right name in `LEAVES_SEED_MODEL` or
+`NURSE_SEED_MODEL` in `lab.conf` and run it again. It seeds `stages` first, so a
+failure there does not cost you the volume that matters.
 
 The volumes live in `lab.conf`. They are not arbitrary:
 

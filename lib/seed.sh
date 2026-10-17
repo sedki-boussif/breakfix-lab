@@ -107,7 +107,19 @@ app_manage() {
     ( cd "$dir" && lab_as_root docker compose exec -T "$(svc_name "$app" api)" \
         python manage.py "$@" )
   else
-    ( cd "$dir" && lab_as_root ./.venv/bin/python manage.py "$@" )
+    # A systemd-run app takes its settings from the unit's EnvironmentFile.
+    # manage.py is not systemd, so it gets none of them unless we load the same
+    # file — without which Django raises at import and the seeder looks broken.
+    local envvar; envvar="$(printf '%s_ENV' "${app^^}")"
+    local env_file="${!envvar:-}"
+    # shellcheck disable=SC2016  # $1 is the inner script's parameter
+    ( cd "$dir" && lab_as_root bash -c '
+        set -a
+        [[ -z "$1" ]] || [[ ! -r "$1" ]] || . "$1"
+        set +a
+        shift
+        exec ./.venv/bin/python manage.py "$@"
+      ' _ "$env_file" "$@" )
   fi
 }
 

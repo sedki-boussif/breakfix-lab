@@ -3,6 +3,9 @@
 #
 #   cp lab.conf.example lab.conf
 
+# URLs use 127.0.0.1 rather than localhost on purpose: every container here
+# publishes to the loopback IPv4 address only, and "localhost" resolves to ::1
+# first on a dual-stack VM, which turns every check into a retry.
 RUN_MODE="compose"            # the default, for anything without its own mode
 
 # The lab does not run all three apps the same way, on purpose:
@@ -16,10 +19,10 @@ NURSE_MODE="compose"
 # --- the three apps ---------------------------------------------------------
 # STAGES_DIR points at the stand-in app by default (see stages-lab/README.md).
 # Point it at the real private app later without touching any challenge.
-STAGES_DIR="/opt/stages";  STAGES_URL="http://localhost:8080/"
-LEAVES_DIR="/opt/leaves";  LEAVES_URL="http://localhost:8081/etoile-formation-conge/"
-NURSE_DIR="/opt/nurse";    NURSE_API="http://localhost:8000/api/health/"
-NURSE_WEB="http://localhost:3000/"
+STAGES_DIR="/opt/stages";  STAGES_URL="http://127.0.0.1:8080/"
+LEAVES_DIR="/opt/leaves";  LEAVES_URL="http://127.0.0.1:8081/etoile-formation-conge/"
+NURSE_DIR="/opt/nurse";    NURSE_API="http://127.0.0.1:8000/api/health/"
+NURSE_WEB="http://127.0.0.1:3000/"
 DB_SERVICE="db"
 BACKUP_DIR="/var/backups/lab"
 
@@ -79,7 +82,7 @@ LEAVES_ENV="/etc/leaves/leaves.env"          # EnvironmentFile= of the unit
 LEAVES_STATIC_ROOT="/opt/leaves/staticfiles" # STATIC_ROOT after collectstatic
 LEAVES_CSS="static/admin/css/base.css"       # relative to LEAVES_URL; Django always ships it
 NURSE_ENV="/opt/nurse/.env"                  # env_file: of the compose stack
-NURSE_LIST="http://localhost:8000/api/theses/"   # the list endpoint; confirm the route
+NURSE_LIST="http://127.0.0.1:8000/api/theses/"   # the list endpoint; confirm the route
 STAGES_UPLOADS_VOLUME="stages_uploads"       # docker volume name, from `docker volume ls`
 DEV_USER="dev1"                              # the over-privileged account in s3-07
 
@@ -111,6 +114,10 @@ LAB_JOB_DIR="/opt/lab-jobs"                  # s5-09: where the nightly job live
 LAB_JOB_OUT="/var/lib/lab-jobs/report.csv"   # s5-09: what it is supposed to produce
 LAB_JOB_MAX_AGE_H="30"                       # s5-09: older than this is "stopped"
 FSTAB="/etc/fstab"                           # s5-07: named so nothing hard-codes it
+
+# TLS, recorded in section 8 of SETUP.md so s4-03 knows what to swap out.
+TLS_CERT="/etc/nginx/tls/lab.crt"
+TLS_KEY="/etc/nginx/tls/lab.key"
 
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"
