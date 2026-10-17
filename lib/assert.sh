@@ -186,6 +186,16 @@ assert_below() {
   fi
 }
 
+# assert_above <description> <actual> <floor> [unit]
+assert_above() {
+  local desc="$1" actual="$2" floor="$3" unit="${4:-}"
+  if awk -v a="$actual" -v f="$floor" 'BEGIN{exit !(a+0 > f+0)}'; then
+    assert_pass "$desc (${actual}${unit} > ${floor}${unit})"
+  else
+    assert_fail "$desc" "${actual}${unit} is not above ${floor}${unit}"
+  fi
+}
+
 # assert_equal <description> <actual> <expected>
 assert_equal() {
   local desc="$1" actual="${2:-}" expected="${3:-}"
@@ -244,4 +254,117 @@ assert_absent() {
   else
     assert_pass "$desc (detector proved against a planted instance)"
   fi
+}
+
+# health_check — one definition of "the lab is healthy".
+#
+# Called by `lab chaos --check`, where a round that fired nothing is passed by
+# proving health rather than by finding a fault, and by the stage 8 acceptance
+# suite. Keeping it in one place is the point: two definitions of healthy would
+# mean a chaos round could pass while the acceptance suite failed.
+#
+# Needs lab.conf sourced, and lib/svc.sh for the service checks.
+health_check() {
+  local app mode unit seen="" port users u pct
+
+  # --- the three applications answer -------------------------------------
+  assert_http "stages answers"         "${STAGES_URL:?}" 200
+  assert_http "leaves answers"         "${LEAVES_URL:?}" 200
+  assert_http "the theses API answers" "${NURSE_API:?}"  200
+  [[ -z "${NURSE_WEB:-}" ]] || assert_http "the theses site answers" "$NURSE_WEB" 200
+
+  # --- every expected service is running, and will come back after a boot --
+  for app in stages leaves nurse; do
+    local modevar="${app^^}_MODE"
+    mode="${!modevar:-${RUN_MODE:-}}"
+    if [[ "$mode" == "systemd" ]]; then
+      local unitvar
+      for unitvar in "${app^^}_API_UNIT" "${app^^}_WEB_UNIT"; do
+        unit="${!unitvar:-}"
+        [[ -n "$unit" ]] || continue
+        [[ " $seen " != *" $unit "* ]] || continue
+        seen+=" $unit"
+        assert_cmd "${unit} is running" systemctl is-active --quiet "$unit"
+        assert_cmd "${unit} is enabled at boot" systemctl is-enabled --quiet "$unit"
+      done
+    else
+      assert_service "${app}'s api is running" "$app" api
+      assert_service "${app}'s web is running" "$app" web
+    fi
+  done
+  assert_cmd "nginx is running" systemctl is-active --quiet "${NGINX_UNIT:-nginx.service}"
+  assert_cmd "the database is running" systemctl is-active --quiet "${DB_UNIT:-postgresql.service}"
+
+  # --- resources, as measurements ----------------------------------------
+  pct="$(df -P / | awk 'NR==2{gsub("%","",$5); print $5+0}')"
+  assert_below "the root filesystem has room" "$pct" "${HEALTH_DISK_PCT:-80}" "%"
+  pct="$(df -Pi / | awk 'NR==2{gsub("%","",$5); print $5+0}')"
+  assert_below "the root filesystem has inodes" "$pct" "${HEALTH_INODE_PCT:-80}" "%"
+  pct="$(awk '/MemAvailable/{printf "%d", $2/1024}' /proc/meminfo)"
+  assert_above "memory available is above the floor" "$pct" "${HEALTH_MEM_MIN_MB:-256}" "MB"
+  pct="$(awk -v c="$(nproc)" '{printf "%.2f", $1/c}' /proc/loadavg)"
+  assert_below "load average per core is sane" "$pct" "${HEALTH_LOAD_PER_CORE:-2.0}"
+
+  # --- nothing listening that should not be ------------------------------
+  if [[ -n "${EXPECTED_PORTS:-}" ]]; then
+    local unexpected=""
+    while read -r port; do
+      [[ -n "$port" ]] || continue
+      [[ " ${EXPECTED_PORTS} " != *" ${port} "* ]] || continue
+      unexpected+="${port} "
+    done < <(ss -ltnH 2>/dev/null | awk '{n=split($4,a,":"); print a[n]}' | sort -un)
+    if [[ -z "$unexpected" ]]; then
+      assert_pass "no unexpected listening ports"
+    else
+      assert_fail "no unexpected listening ports" \
+        "listening and not in EXPECTED_PORTS: ${unexpected}— sudo ss -ltnp to see what owns them"
+    fi
+  else
+    printf 'SKIP  EXPECTED_PORTS is not set in lab.conf, so ports were not checked\n'
+  fi
+
+  # --- and no accounts that should not be there --------------------------
+  if [[ -n "${EXPECTED_USERS:-}" ]]; then
+    local extra=""
+    while read -r u; do
+      [[ -n "$u" ]] || continue
+      [[ " ${EXPECTED_USERS} " != *" ${u} "* ]] || continue
+      extra+="${u} "
+    done < <(awk -F: '$3>=1000 && $3<65534 {print $1}' /etc/passwd | sort)
+    if [[ -z "$extra" ]]; then
+      assert_pass "no unexpected user accounts"
+    else
+      assert_fail "no unexpected user accounts" \
+        "not in EXPECTED_USERS: ${extra}— getent passwd <name>, and check their shell and keys"
+    fi
+  else
+    printf 'SKIP  EXPECTED_USERS is not set in lab.conf, so accounts were not checked\n'
+  fi
+  users="$(awk -F: '$3==0 {print $1}' /etc/passwd | grep -vx root | tr '\n' ' ')"
+  if [[ -z "$users" ]]; then
+    assert_pass "root is the only uid 0"
+  else
+    assert_fail "root is the only uid 0" "also uid 0: ${users}"
+  fi
+
+  # --- the things that fail silently -------------------------------------
+  health_file_fresh "the backup marker is fresh" "${BACKUP_MARKER:-}" "${BACKUP_MAX_AGE_H:-30}"
+  health_file_fresh "the nightly report is fresh" "${LAB_JOB_OUT:-}" "${LAB_JOB_MAX_AGE_H:-30}"
+}
+
+# health_file_fresh <description> <path> <max age hours>
+# Unset path means "not built yet", which is reported rather than failed: the
+# backup marker does not exist until stage 7 has been done.
+health_file_fresh() {
+  local desc="$1" path="${2:-}" max_h="${3:-30}" age_h
+  if [[ -z "$path" ]]; then
+    printf 'SKIP  %s — not configured in lab.conf yet\n' "$desc"
+    return 0
+  fi
+  if [[ ! -e "$path" ]]; then
+    assert_fail "$desc" "${path} does not exist — whatever writes it has never succeeded"
+    return 0
+  fi
+  age_h=$(( ( $(date +%s) - $(stat -c '%Y' "$path") ) / 3600 ))
+  assert_below "$desc" "$age_h" "$max_h" "h"
 }

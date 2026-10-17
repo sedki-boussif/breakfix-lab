@@ -138,6 +138,24 @@ LAB_JOB_OUT="/var/lib/lab-jobs/report.csv"   # s5-09: what it is supposed to pro
 LAB_JOB_MAX_AGE_H="30"                       # s5-09: older than this is "stopped"
 FSTAB="/etc/fstab"                           # s5-07: named so nothing hard-codes it
 
+# --- what "healthy" means ---------------------------------------------------
+# health_check in lib/assert.sh reads these, and both `lab chaos --check` and
+# the stage 8 acceptance suite call health_check, so this is the single place
+# the definition lives. Capture the port and user lists after SETUP.md section
+# 10, when the machine is in the state you want to defend.
+HEALTH_DISK_PCT="80"
+HEALTH_INODE_PCT="80"
+HEALTH_MEM_MIN_MB="256"
+HEALTH_LOAD_PER_CORE="2.0"
+# ss -ltnH | awk '{n=split($4,a,":"); print a[n]}' | sort -un | tr '\n' ' '
+EXPECTED_PORTS="22 80 443 3000 5432 8000 8080 8081"
+# awk -F: '$3>=1000 && $3<65534 {print $1}' /etc/passwd | tr '\n' ' '
+EXPECTED_USERS=""
+# Written by the backup timer in s7-01. Absent until then, which health_check
+# reports rather than failing on.
+BACKUP_MARKER=""
+BACKUP_MAX_AGE_H="30"
+
 # TLS, recorded in section 8 of SETUP.md so s4-03 knows what to swap out.
 TLS_CERT="/etc/nginx/tls/lab.crt"
 TLS_KEY="/etc/nginx/tls/lab.key"

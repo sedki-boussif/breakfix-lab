@@ -41,6 +41,10 @@ lab — break-fix lab
   lab doctor                diagnose the lab itself, when you cannot tell
                             whether the fault is the lab or you
 
+  lab chaos                 fire a fault you did not choose — or nothing at all
+  lab chaos --check         assert the machine is healthy, not a given fault
+  lab chaos --reveal        what the last round did, and mark it revealed
+
 `lab chaos` arrives with stage 9.
 
 Only start, check and reset need lab.conf — they are the three that touch the
@@ -389,7 +393,10 @@ main() {
     reset)    [[ $# -ge 2 ]] || die "usage: lab reset <id>";  cmd_reset "$2" ;;
     solution) [[ $# -ge 2 ]] || die "usage: lab solution <id> [--give-up]"
               cmd_solution "$2" "${3:-}" ;;
-    chaos)    die "'chaos' arrives with stage 9, once the catalogue exists" ;;
+    chaos)    shift || true
+              # shellcheck source=lib/chaos.sh
+              . "$LAB_ROOT/lib/chaos.sh"
+              cmd_chaos "${1:-}" ;;
     ''|-h|--help|help) usage ;;
     *) usage; die "unknown command: $cmd" ;;
   esac

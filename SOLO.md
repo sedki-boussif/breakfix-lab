@@ -377,7 +377,51 @@ one in the morning.
 
 ---
 
-## 7. The five commands worth memorising
+## 7. Chaos rounds, when you want work without choosing it
+
+```bash
+lab chaos                 # fires one fault, two, or nothing at all
+lab chaos --check         # asserts the machine is healthy, not a named fault
+lab chaos --reveal        # what it did, and marks the round revealed
+lab chaos --pool          # which challenges are eligible right now
+```
+
+It draws only from reversible incidents at level 2–4, so no round can land you
+in a state that needs a snapshot or the console. It prints a time and a round
+id, and nothing else.
+
+**A round that fires nothing is passed by proving health**, not by finding a
+fault — `lab chaos --check` runs `health_check`, the same definition the stage 8
+acceptance suite uses. Saying "nothing is wrong" and being able to defend it is
+the harder half of the job and the part nobody practises.
+
+Write the report either way, including the empty rounds; for an empty one, state
+how you concluded the machine was healthy and what you checked to be sure.
+
+If `--check` fails, `lab doctor` first: it tells you whether the ground is sound
+before you go looking for a fault in it.
+
+**The best version of this needs another person.** Have someone run `lab chaos`
+and describe the symptom to you in their own words, over chat, while you cannot
+see their screen. No script reproduces that, and it is the actual job.
+
+---
+
+## 8. Measuring, when "it feels slow" is not enough
+
+```bash
+. lib/load.sh
+lab_load_run http://127.0.0.1:8081/etoile-formation-conge/ 20 30
+# requests=1502 rps=250.3 p50=0.005 p95=0.011 errors=0 error_rate=0.00
+```
+
+Parallel curl, nothing to install. `lab_load_p95` prints just the p95 for use
+with `assert_below`. Take a reading *before* you change anything: a number you
+cannot compare against is not a measurement.
+
+---
+
+## 9. The five commands worth memorising
 
 ```bash
 lab doctor                      # is the lab the problem?
