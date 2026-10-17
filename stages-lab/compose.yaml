@@ -1,0 +1,75 @@
+# stages-lab — the App A stand-in.
+#
+# The shape matters more than the contents: two networks with the back one
+# internal so the database has no route off the host, an uploads volume with a
+# non-root owner, healthchecks on all three services, and web refusing to come
+# up until api is actually healthy.
+name: stages
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_ROLE: ${APP_DB_ROLE}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # Runs once, on an empty data directory: creates the restricted role.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [back]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - uploads:/app/uploads
+    # On both networks: it needs the database behind, and the web tier in front.
+    networks: [back, front]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health/',timeout=4).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    # Loopback only. The host nginx is what the outside world talks to.
+    ports:
+      - "127.0.0.1:8080:80"
+    networks: [front]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  front:
+  back:
+    # No route off the host. The database is reachable from api and nothing else.
+    internal: true
+
+volumes:
+  db_data:
+  uploads:

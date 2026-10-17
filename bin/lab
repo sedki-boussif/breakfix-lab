@@ -38,7 +38,8 @@ lab — break-fix lab
 
 `lab chaos` arrives with stage 9.
 
-Only `list` and `--help` work without lab.conf:
+Only start, check and reset need lab.conf — they are the three that touch the
+running system. Everything else reads only the repo and your progress:
   cp lab.conf.example lab.conf
 EOF
 }
@@ -149,7 +150,6 @@ cmd_list() {
 
 cmd_next() {
   local id path need blocked candidate=''
-  load_conf
   for id in $(challenge_ids); do
     is_passed "$id" && continue
     path="$CHALLENGE_DIR/$id"
@@ -242,7 +242,6 @@ cmd_start() {
 cmd_hint() {
   local id="$1" path used total hint
   path="$(challenge_path "$id")"
-  load_conf
   used="$(progress_get "$id" HINTS_USED 0)"
   total="$(grep -cve '^[[:space:]]*$' "$path/hints.md")"
   if (( used >= total )); then
@@ -283,7 +282,6 @@ cmd_check() {
 cmd_report() {
   local id="$1" path dest
   path="$(challenge_path "$id")"
-  load_conf
   load_meta "$path"
   mkdir -p "$LAB_ROOT/reports"
   dest="$LAB_ROOT/reports/${id}.md"
@@ -296,7 +294,6 @@ cmd_report() {
 cmd_solution() {
   local id="$1" give_up="${2:-}" path file
   path="$(challenge_path "$id")"
-  load_conf
   load_meta "$path"
   file="$LAB_ROOT/solutions/${id}.md"
 
@@ -339,7 +336,6 @@ cmd_reset() {
 
 cmd_status() {
   local id broken_at status seen n=0
-  load_conf
   for id in $(challenge_ids); do
     status="$(progress_get "$id" STATUS '')"
     broken_at="$(state_get "$id" BROKEN_AT 0)"

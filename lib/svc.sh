@@ -7,11 +7,20 @@
 # role (web|api). Names and units come from lab.conf, never from here.
 set -euo pipefail
 
+# How a given app is run. RUN_MODE is the default; <APP>_MODE overrides it,
+# because the lab does not run all three the same way — leaves starts life as
+# gunicorn under systemd precisely so that s6-02 has something to containerise.
 svc_mode() {
-  case "${RUN_MODE:-}" in
-    compose|systemd) printf '%s\n' "$RUN_MODE" ;;
-    *) printf 'svc: RUN_MODE must be "compose" or "systemd", got "%s"\n' \
-         "${RUN_MODE:-unset}" >&2; return 1 ;;
+  local app="${1:-}" var mode
+  mode="${RUN_MODE:-}"
+  if [[ -n "$app" ]]; then
+    var="$(printf '%s_MODE' "${app^^}")"
+    mode="${!var:-$mode}"
+  fi
+  case "$mode" in
+    compose|systemd) printf '%s\n' "$mode" ;;
+    *) printf 'svc: mode for "%s" must be compose or systemd, got "%s"\n' \
+         "${app:-default}" "${mode:-unset}" >&2; return 1 ;;
   esac
 }
 
@@ -24,7 +33,7 @@ svc_app_dir() {
 # The compose service name, or the systemd unit name, for an app and role.
 svc_name() {
   local app="${1}" role="${2:-web}" var
-  case "$(svc_mode)" in
+  case "$(svc_mode "$app")" in
     compose)
       case "${app}:${role}" in
         stages:web) var=STAGES_WEB ;;  stages:api) var=STAGES_API ;;
@@ -65,7 +74,7 @@ svc_disable() { _svc_do disable "$@"; }
 _svc_do() {
   local action="$1" app="$2" role="${3:-web}" name
   name="$(svc_name "$app" "$role")"
-  if [[ "$app" == "nginx" || "$(svc_mode)" == "systemd" ]]; then
+  if [[ "$app" == "nginx" || "$(svc_mode "$app")" == "systemd" ]]; then
     case "$action" in
       start|stop|restart) lab_as_root systemctl "$action" "$name" ;;
       enable)  lab_as_root systemctl enable  --now "$name" ;;
@@ -85,7 +94,7 @@ _svc_do() {
 svc_is_active() {
   local app="$1" role="${2:-web}" name state
   name="$(svc_name "$app" "$role")"
-  if [[ "$app" == "nginx" || "$(svc_mode)" == "systemd" ]]; then
+  if [[ "$app" == "nginx" || "$(svc_mode "$app")" == "systemd" ]]; then
     systemctl is-active --quiet "$name"
     return
   fi
@@ -96,7 +105,7 @@ svc_is_active() {
 svc_logs() {
   local app="$1" role="${2:-web}" lines="${3:-50}" name
   name="$(svc_name "$app" "$role")"
-  if [[ "$app" == "nginx" || "$(svc_mode)" == "systemd" ]]; then
+  if [[ "$app" == "nginx" || "$(svc_mode "$app")" == "systemd" ]]; then
     lab_as_root journalctl -u "$name" -n "$lines" --no-pager
   else
     svc_compose "$app" logs --tail "$lines" "$name"

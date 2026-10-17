@@ -132,6 +132,7 @@ breakfix-lab/
   lib/seed.sh             seeds fake data into each app's database
   lib/load.sh             load generator: requests/sec, p50, p95, error rate (§6 stage 9)
   report-template.md      the report skeleton `lab report` copies
+  stages-lab/             the App A stand-in: FastAPI + Postgres + nginx, built in §3 of SETUP.md
   challenges/<id>/        one folder per challenge (format in §5)
   reports/                filled-in reports, gitignored
   solutions/<id>.md       the model answer, for after you pass
@@ -186,8 +187,16 @@ Design notes:
   what excludes a challenge from `lab chaos` and from `make test`, so it is not
   optional decoration: a challenge whose brief says "snapshot required" must
   carry it.
-- `lab` must work when `lab.conf` is missing, for `list` and `--help` only, and say
-  clearly what to do.
+- **Only `start`, `check` and `reset` require `lab.conf`**, because only those
+  three touch the running system. `list`, `status`, `next`, `hint`, `report`,
+  `solution` and `--help` read nothing but this repo and the progress state, so
+  they must work without it and must not refuse. `status` above all: it is the
+  command to reach for when something is broken and I am disoriented, and
+  refusing it because a config file is absent is the opposite of useful. When a
+  command that does need `lab.conf` cannot find it, say exactly what to copy
+  where. (This reverses an earlier version of this rule that allowed only `list`
+  and `--help` to work without config. The earlier rule was wrong: it made the
+  diagnostic commands depend on setup having been finished.)
 - Keep output plain and short. Colour only for pass, fail and the challenge title.
 - No `sudo` inside `lab` itself; individual scripts call `sudo` where they need it,
   so the user sees exactly what is escalated.

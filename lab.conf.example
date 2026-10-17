@@ -3,7 +3,15 @@
 #
 #   cp lab.conf.example lab.conf
 
-RUN_MODE="compose"            # or "systemd"
+RUN_MODE="compose"            # the default, for anything without its own mode
+
+# The lab does not run all three apps the same way, on purpose:
+#   stages  ships its own compose.yaml (the stand-in)
+#   leaves  starts as gunicorn under systemd, so s6-02 has work to do
+#   nurse   runs in containers, so s4-04 has a published port to argue about
+STAGES_MODE="compose"
+LEAVES_MODE="systemd"
+NURSE_MODE="compose"
 
 # --- the three apps ---------------------------------------------------------
 # STAGES_DIR points at the stand-in app by default (see stages-lab/README.md).
@@ -34,6 +42,23 @@ NGINX_UNIT="nginx.service"
 # reach the VM as a laptop would rather than over loopback. Leave empty and
 # those challenges will tell you to set it.
 LAB_LAN_IP=""
+
+# Virtual hosts the host nginx answers on. Invented names under .invalid, which
+# is reserved and can never resolve publicly. Put them in /etc/hosts on the VM
+# and on your laptop, pointing at LAB_LAN_IP. See SETUP.md section 8.
+STAGES_VHOST="stages.lab.invalid"
+LEAVES_VHOST="conge.lab.invalid"
+NURSE_VHOST="theses.lab.invalid"
+
+# --- seed volumes -----------------------------------------------------------
+# Why these numbers: SETUP.md section 9. Shrink them on a small VM, but read
+# that section first — s9-02 and s9-03 stop being measurable below roughly a
+# tenth of SEED_PLACEMENTS.
+SEED_TRAINEES="400"
+SEED_PLACEMENTS="60000"
+SEED_AUDIT="5000"
+SEED_THESES="3000"
+SEED_LEAVE_REQUESTS="60"
 
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"

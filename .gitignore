@@ -10,3 +10,10 @@ work/
 # Editor and OS noise
 *.swp
 .DS_Store
+
+# stages-lab build and runtime artefacts
+.env
+__pycache__/
+*.pyc
+node_modules/
+dist/
