@@ -1,0 +1,8 @@
+STAGE=3
+TYPE=incident
+TITLE="The leave app returns 502"
+LEVEL=2
+APPS=leaves
+NEEDS=
+SNAPSHOT=deployed
+RISK=

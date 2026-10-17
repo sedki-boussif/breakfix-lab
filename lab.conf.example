@@ -60,5 +60,17 @@ SEED_AUDIT="5000"
 SEED_THESES="3000"
 SEED_LEAVE_REQUESTS="60"
 
+# Bulk seed targets, pinned to the models these two repos actually ship.
+#   leaves v3.0  project leave_management_project, app leave_management
+#   nurse        project config, app theses
+# seed.sh still falls back to introspection, and still prints every model it
+# found and stops rather than guessing, if a tag moves these.
+LEAVES_SEED_MODEL="LeaveRequest"
+NURSE_SEED_MODEL="Thesis"
+
+# WSGI entry points, which differ between the two.
+LEAVES_WSGI="leave_management_project.wsgi:application"
+NURSE_WSGI="config.wsgi:application"
+
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"

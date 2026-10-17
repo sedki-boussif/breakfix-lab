@@ -197,6 +197,18 @@ Design notes:
   where. (This reverses an earlier version of this rule that allowed only `list`
   and `--help` to work without config. The earlier rule was wrong: it made the
   diagnostic commands depend on setup having been finished.)
+- **`RUN_MODE` is a default, not a global.** The lab does not run all three apps
+  the same way, and cannot: s6-02 is a mission to *containerise* `leaves`, which
+  is only possible if `leaves` starts life as gunicorn under systemd, while s4-04
+  needs `nurse` to have a genuinely published container port to argue about. So
+  `lab.conf` carries `STAGES_MODE`, `LEAVES_MODE` and `NURSE_MODE`, each falling
+  back to `RUN_MODE` when unset, and `lib/svc.sh` resolves the mode **per app**
+  rather than once. A challenge that touches two apps may therefore be talking to
+  systemd and to compose in the same script, and must not assume otherwise.
+  (This replaces the single global `RUN_MODE` of the original §3: s3-01's own
+  break description — "corrupt the `ExecStart` path, *or* in compose mode set the
+  API command to a module that does not exist" — already assumed per-app modes
+  without saying so.)
 - Keep output plain and short. Colour only for pass, fail and the challenge title.
 - No `sudo` inside `lab` itself; individual scripts call `sudo` where they need it,
   so the user sees exactly what is escalated.
@@ -478,10 +490,28 @@ definition.
   one upstream in the nginx block pointing somewhere wrong while the others are
   fine. *Check:* 100 consecutive requests all return 200, and the worker or
   upstream count is intact.
-- **s9-02 Slow, but only under load** (L4) — *break:* a low connection or worker
-  limit, or a missing index on a seeded large table. Nothing is visibly wrong at
-  one request at a time. *Check:* p95 latency under a stated threshold at a stated
+- **s9-02 Slow, but only under load** (L4) — *break:* starve the pool — a low
+  gunicorn worker count, or a low PostgreSQL `max_connections`, or both. Nothing
+  is visibly wrong at one request at a time; the queue only forms under
+  concurrency. *Check:* p95 latency under a stated threshold at a stated
   concurrency, measured with `lib/load.sh`.
+- **s9-07 The query that got slow** (L3) — *break:* drop the index on
+  `placements (ward, started_on)`, which the seeded 60,000-row table depends on.
+  *Check:* measured with `EXPLAIN (ANALYZE)` and query time, not with a load
+  generator: the plan uses an index scan rather than a sequential scan, and the
+  filtered query runs at least four times faster than the unindexed plan on the
+  same data.
+
+  **Why these are two challenges and not one.** The original s9-02 offered the
+  worker limit and the missing index as alternatives for the same fault. Measuring
+  the stand-in proved they are not interchangeable. At 60,000 rows the index is
+  worth 3.1 ms against 14.7 ms — a 4.7× ratio, which is a fine signal for
+  `EXPLAIN ANALYZE` but about 11 ms of wall clock, and on a 2 vCPU VM where
+  `lib/load.sh` is competing for the same two cores, 11 ms disappears into the
+  noise of the load generator itself. Starving a worker pool, by contrast, has a
+  large and unambiguous effect on p95 under concurrency, because requests queue
+  rather than merely running slower. So the load-shaped fault keeps the
+  load-shaped measurement, and the index keeps a measurement that suits it.
 - **s9-03 It gets worse over hours** (L4) — *break:* a slow leak — a log growing
   fast, an unbounded table, a process leaking memory. At minute one there is no
   symptom. *Check:* the growth rate is flat over a measured window, and the report
@@ -559,7 +589,7 @@ challenges before the first one works end to end.
    spend most of my time, so they get the most care.
 5. **Stage 2, 4, 6, 7** challenges.
 6. **Stage 8**, a long acceptance suite plus a brief. Then **Stage 9**: build
-   `lab chaos`, `lib/load.sh` and `health_check` first, then its six challenges.
+   `lab chaos`, `lib/load.sh` and `health_check` first, then its seven challenges.
 7. **`solutions/`** for everything.
 
 ---

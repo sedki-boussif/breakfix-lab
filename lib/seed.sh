@@ -120,7 +120,13 @@ hint = os.environ["SEED_MODEL_HINT"].lower()
 count = int(os.environ["SEED_COUNT"])
 random.seed(20261017)  # deterministic: the same lab twice is the same lab
 
-matches = [m for m in apps.get_models() if hint in m.__name__.lower()]
+# An exact name wins over a substring, so a hint of "Thesis" cannot land on
+# ThesisStatusHistory depending on the order Django happens to return models in.
+exact = [m for m in apps.get_models() if m.__name__.lower() == hint]
+matches = exact or sorted(
+    (m for m in apps.get_models() if hint in m.__name__.lower()),
+    key=lambda m: len(m.__name__),
+)
 if not matches:
     print("SEED-FAIL: no model matching %r. Models this project has:" % hint)
     for m in sorted(apps.get_models(), key=lambda x: x._meta.label):
@@ -145,16 +151,20 @@ def value_for(field, n):
     if getattr(field, "choices", None):
         return field.choices[n % len(field.choices)][0]
     if kind in ("CharField", "TextField", "SlugField"):
-        base = "%s %s" % (TOPIC[n % len(TOPIC)], n) if field.max_length is None \
-            or field.max_length > 40 else "LAB-%05d" % n
         if field.unique:
-            base = "LAB-%05d %s" % (n, base)
+            # Unique first, readable second: the counter leads so truncation to
+            # max_length can never collide two rows.
+            return ("LAB-%06d %s" % (n, TOPIC[n % len(TOPIC)]))[: (field.max_length or 200)]
+        wide = field.max_length is None or field.max_length > 40
+        base = "%s %d" % (TOPIC[n % len(TOPIC)], n) if wide else "LAB-%05d" % n
         return base[: (field.max_length or 200)]
     if kind == "EmailField":
         return "%s.%s%d@lab.invalid" % (GIVEN[n % 12].lower(), SURNAME[n % 10].lower(), n)
     if kind in ("IntegerField", "BigIntegerField", "SmallIntegerField",
                 "PositiveIntegerField", "PositiveSmallIntegerField"):
-        return 1 + (n % 7)
+        # A unique integer column cannot be one of seven values. nurse's
+        # Thesis.numero is exactly this case.
+        return 900000 + n if field.unique else 1 + (n % 7)
     if kind in ("DecimalField", "FloatField"):
         return 1 + (n % 7)
     if kind == "BooleanField":
@@ -198,13 +208,13 @@ PY
 seed_leaves() {
   lab_guard
   printf 'leaves: %s leave requests\n' "$SEED_LEAVE_REQUESTS"
-  django_seed leaves "${LEAVES_SEED_MODEL:-leave}" "$SEED_LEAVE_REQUESTS"
+  django_seed leaves "${LEAVES_SEED_MODEL:-LeaveRequest}" "$SEED_LEAVE_REQUESTS"
 }
 
 seed_nurse() {
   lab_guard
   printf 'nurse: %s theses\n' "$SEED_THESES"
-  django_seed nurse "${NURSE_SEED_MODEL:-thesis}" "$SEED_THESES"
+  django_seed nurse "${NURSE_SEED_MODEL:-Thesis}" "$SEED_THESES"
 }
 
 main() {

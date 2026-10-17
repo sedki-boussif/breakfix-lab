@@ -352,7 +352,7 @@ EnvironmentFile=/etc/leaves/leaves.env
 ExecStart=/opt/leaves/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8081 \
           --access-logfile /var/log/leaves/access.log \
           --error-logfile /var/log/leaves/error.log \
-          config.wsgi:application
+          leave_management_project.wsgi:application
 Restart=on-failure
 RestartSec=3
 
@@ -366,10 +366,24 @@ systemctl is-active leaves
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/etoile-formation-conge/
 ```
 
-The WSGI module above is a guess at the repo's layout. If gunicorn cannot import
-it, find the real one — `ls */wsgi.py` — and fix `ExecStart`. Everything is
-mounted under `/etoile-formation-conge/`, `admin/` and `login/` included, so a
-bare `/` returning 404 is correct and not a fault.
+**The layout, pinned.** At `v3.0` the Django project package is
+`leave_management_project` and the application is `leave_management`, so the
+WSGI entry point is `leave_management_project.wsgi:application` — note that it
+is *not* `config.wsgi`, which is what `nurse` uses. Models live in
+`leave_management/models.py`: `LeaveRequest`, `Holiday`, and a custom user model
+with a `role` field, which is what `build.sh` sets to `HR` when it seeds
+`rh_admin`. Migrations run to `0004_leaverequest_ceo_decision_at_and_more`.
+
+Verify that against the repo you actually cloned before trusting it — a moved
+tag changes all of it:
+
+```bash
+ls /opt/leaves/*/wsgi.py                        # the project package
+./.venv/bin/python manage.py showmigrations leave_management | tail -3
+```
+
+Everything is mounted under `/etoile-formation-conge/`, `admin/` and `login/`
+included, so a bare `/` returning 404 is correct and not a fault.
 
 `/var/log/leaves/access.log` is what s2-04 writes a logrotate rule for, so do
 not point it at the journal instead.
@@ -440,8 +454,32 @@ EOF
 chmod 600 .env
 docker compose up -d --build
 docker compose exec -T api python manage.py migrate
-docker compose exec -T api python manage.py createsuperuser --no-input \
-  --username staff_demo --email staff_demo@lab.invalid || true
+# This repo ships its own command for the staff account; use it rather than
+# createsuperuser, so the role and defaults it sets are the ones you get.
+docker compose exec -T api python manage.py create_default_superuser
+```
+
+**The layout, pinned.** The Django project package is `config`, so
+`config.wsgi:application` is correct here (unlike `leaves`). The application is
+`theses`, with models in `theses/models.py`: `Thesis` and
+`ThesisStatusHistory`. `Thesis.numero` carries a uniqueness constraint, which
+matters when seeding — `seed.sh` generates it from a counter for exactly this
+reason. Migrations run to
+`0003_thesisstatushistory_thesis_disponible_and_more`. Two management commands
+already exist: `import_excel` and `create_default_superuser`.
+
+**The repo root is messy.** Duplicate `.jsx` and `.py` files sit at the top
+level alongside the real `frontend/src/` and `theses/`. **The canonical copies
+are the ones inside those directories** — edit `theses/models.py`, not a
+`models.py` at the root, and `frontend/src/App.jsx`, not a root-level `App.jsx`.
+s4-07 patches this repo for real, so know which file you are editing before you
+start, or you will fix a copy nothing imports.
+
+```bash
+# Verify before trusting any of the above:
+docker compose exec -T api ls config/wsgi.py theses/models.py
+docker compose exec -T api python manage.py showmigrations theses | tail -3
+docker compose exec -T api python manage.py help | grep -A3 '\[theses\]'
 ```
 
 **`VITE_API_URL` is read at build time**, not at run time. A wrong value is
@@ -550,7 +588,7 @@ The volumes live in `lab.conf`. They are not arbitrary:
 
 | Setting | Default | Why that number |
 | --- | --- | --- |
-| `SEED_PLACEMENTS` | **60,000** | This is the one that matters. s9-02 drops the index on `(ward, started_on)` and asks you to notice under load. At a few hundred rows a sequential scan and an index lookup are both under a millisecond — inside measurement noise, so the "fault" would be invisible and the challenge dishonest. At 60,000 rows the gap is real and measured: on the machine this was developed on, the filtered count runs in **3.1 ms** on a bitmap index scan and **14.7 ms** on a sequential scan — a 4–5× difference per query, which compounds into a p95 of seconds once a load generator is asking 50 at a time. 60,000 also seeds in about six seconds and fits comfortably in a backup you will restore over and over |
+| `SEED_PLACEMENTS` | **60,000** | This is the one that matters. s9-07 drops the index on `(ward, started_on)` and asks you to notice. (s9-02 is now the worker-pool fault instead: an 11 ms query difference cannot be seen through a load generator sharing two cores, but a starved pool is unmistakable.) At a few hundred rows a sequential scan and an index lookup are both under a millisecond — inside measurement noise, so the "fault" would be invisible and the challenge dishonest. At 60,000 rows the gap is real and measured: on the machine this was developed on, the filtered count runs in **3.1 ms** on a bitmap index scan and **14.7 ms** on a sequential scan. That 4.7× ratio is plain in `EXPLAIN (ANALYZE)`, which is how s9-07 measures it — but it is only about 11 ms of wall clock, so do **not** expect to see it through a load generator competing for the same two cores. 60,000 also seeds in about six seconds and fits comfortably in a backup you will restore over and over |
 | `SEED_AUDIT` | **5,000** | s9-03 measures a *growth rate*, and a rate needs a baseline to subtract. Starting from an empty table makes any growth look infinite and nothing look like a trend. 5,000 rows is a credible few months of history to measure against |
 | `SEED_TRAINEES` | 400 | Enough that `placements` fans out across many parents, so the join is not degenerate and the planner's choices are realistic |
 | `SEED_THESES` | 3,000 | Enough for the catalogue's search and pagination to behave like a catalogue rather than a list, and for s3-02's "the list endpoint returns rows" to mean something |
@@ -561,7 +599,7 @@ about 6,000 placements, s9-02 stops being measurable and you should skip it
 rather than pretend — a challenge whose fault hides inside the error bars
 teaches the wrong lesson.
 
-**Check the gap on your own VM before trusting s9-02**, because the numbers above
+**Check the gap on your own VM before trusting s9-07**, because the numbers above
 came from a development workstation and yours will be slower:
 
 ```bash
@@ -576,6 +614,8 @@ docker compose exec -T db psql -U stages_owner -d stages   -c "CREATE INDEX ix_p
 You want to see `Bitmap Index Scan` become `Seq Scan`, and the execution time
 rise by at least 4×. If it does not, raise `SEED_PLACEMENTS` to 200,000 and
 re-seed — the cost is a slower seed and a bigger backup, not a worse lab.
+s9-07 measures with `EXPLAIN (ANALYZE)` and query time rather than wall clock
+under load, which is why a 4–5× ratio is enough signal for it.
 
 **For s9-03 you also need a log baseline.** `/var/log/leaves/access.log` and the
 `audit_log` table are what grow. Record their size now, because "it gets worse
@@ -586,12 +626,14 @@ reading:
 { date -Is; ls -l /var/log/leaves/access.log; } | tee -a ~/lab-baseline.txt
 ```
 
-**The two public repos' schemas are not known to this repo.** `seed.sh` seeds
-`stages` precisely, because the lab owns that schema. For `leaves` and `nurse` it
-asks Django what models exist, matches one against a hint, and fills fields by
-type. If the hint is wrong it prints every model it found and stops — set
-`LEAVES_SEED_MODEL` or `NURSE_SEED_MODEL` in `lab.conf` and run it again. Do
-that once now, while the repos are fresh in your mind, rather than during a
+**The bulk seed targets are pinned**: `LeaveRequest` for `leaves` and `Thesis`
+for `nurse`, both set in `lab.conf`. `seed.sh` seeds `stages` precisely because
+the lab owns that schema; for the other two it asks Django for the named model,
+preferring an exact name match so a hint of `Thesis` cannot land on
+`ThesisStatusHistory`, and fills remaining fields by type. If a tag has moved
+and the model is not there, it prints every model it found and stops rather than
+guessing — change `LEAVES_SEED_MODEL` or `NURSE_SEED_MODEL` and run it again.
+Confirm both now, while the repos are fresh in your mind, rather than during a
 timed challenge.
 
 ---
@@ -642,7 +684,7 @@ and the one you roll back to after an irreversible break.
 | `s7-01` … `s7-06` | `deployed` | "Off-VM" is always simulated locally: a second container, a separate mount, or a second VM. Never a real cloud account |
 | **`s7-07`** | `deployed` | **Snapshot required.** `RISK=irreversible`: the fake uploads are scrambled and local backups removed |
 | `s8-01`, `s8-02`, `s8-03` | neither | These start from a **bare Ubuntu 24.04 image**. s8-02 deletes the VM on purpose; rebuilding from Git and backups alone is the exercise. Keep `deployed` so you have something to compare against |
-| `s9-01` … `s9-06` | `deployed` | Including the empty round in s9-06. `lab chaos` draws only from reversible level 2–4 challenges, so it will never fire s4-06, s5-07 or s7-07 |
+| `s9-01` … `s9-07` | `deployed` | Including the empty round in s9-06. `lab chaos` draws only from reversible level 2–4 challenges, so it will never fire s4-06, s5-07 or s7-07 |
 
 Two snapshots, then. Most of the time you want `deployed`. Reach for `clean`
 when a challenge has gone further wrong than `reset.sh` can follow, and when a
