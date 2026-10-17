@@ -1,0 +1,9 @@
+STAGE=5
+TYPE=incident
+TITLE="Disk has space but writes fail"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

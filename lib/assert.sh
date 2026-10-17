@@ -10,6 +10,9 @@
 #   assert_http "the leave app answers" "$LEAVES_URL" 200
 #   assert_summary
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 ASSERT_PASSED=0
 ASSERT_FAILED=0
@@ -138,4 +141,38 @@ assert_service() {
   local desc="$1" app="$2" role="${3:-web}"
   if svc_is_active "$app" "$role" >/dev/null 2>&1; then assert_pass "$desc"
   else assert_fail "$desc" "$app:$role is not running"; fi
+}
+
+# assert_absent <description> <detect_fn> <plant_fn> <clean_fn>
+#
+# Absence is only meaningful if the search works. This plants a known instance,
+# requires the detector to find it, removes it, and only then asserts that
+# nothing is left. A detector that cannot see a planted instance fails loudly
+# instead of passing silently — the bug class that makes a green check worthless.
+#
+# All four arguments are shell function names. detect_fn exits 0 when it FINDS
+# something.
+assert_absent() {
+  local desc="$1" detect="$2" plant="$3" clean="$4"
+
+  # Already present? Then the answer is known and no control is needed.
+  if "$detect" >/dev/null 2>&1; then
+    assert_fail "$desc" "still present"
+    return 0
+  fi
+
+  "$plant" >/dev/null 2>&1 || true
+  if ! "$detect" >/dev/null 2>&1; then
+    "$clean" >/dev/null 2>&1 || true
+    assert_fail "$desc" \
+      "cannot verify absence: ${detect} did not find an instance planted on purpose, so a clean result means nothing"
+    return 0
+  fi
+  "$clean" >/dev/null 2>&1 || true
+
+  if "$detect" >/dev/null 2>&1; then
+    assert_fail "$desc" "the planted control could not be removed, so the result is inconclusive"
+  else
+    assert_pass "$desc (detector proved against a planted instance)"
+  fi
 }

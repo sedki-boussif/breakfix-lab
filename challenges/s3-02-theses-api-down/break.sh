@@ -2,6 +2,9 @@
 # s3-02 — break: DATABASE_URL points at a port nothing listens on, so every
 # query fails and the catalogue renders empty. No data is touched.
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 LAB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=lib/guard.sh

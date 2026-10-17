@@ -2,6 +2,9 @@
 # s3-04 — check: a real stylesheet is served with the right content type, and
 # DEBUG is still off. Turning DEBUG on fixes the look and fails this check.
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 LAB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=lib/guard.sh

@@ -105,9 +105,24 @@ is a bug, not a feature.
    line printed per assertion.
 8. **No network calls.** Nothing downloads anything at run time. The lab works on a
    VM with no internet beyond the package mirrors.
-9. **Bash discipline.** Every script starts with `#!/usr/bin/env bash` and
-   `set -euo pipefail`, quotes all variables, and passes `shellcheck` with no
-   warnings. Add a `make lint` target that runs `shellcheck` over everything.
+9. **Bash discipline.** Every script starts with `#!/usr/bin/env bash`,
+   `set -euo pipefail` **and `shopt -s inherit_errexit`**, quotes all variables,
+   and passes `shellcheck` with no warnings. Add a `make lint` target that runs
+   `shellcheck` over everything.
+
+   `inherit_errexit` is not optional decoration. Without it, `errexit` does not
+   reach inside `$( )`, so a function that fails half way through a command
+   substitution returns its partial output **with status 0** and the caller
+   carries on. This was found the hard way: `lab_fs_make` failed to mount its
+   loopback filesystem, returned the unmounted path anyway, and the break script
+   went on to fill whatever filesystem that path happened to sit on — which in a
+   container was the host's disk. A "bounded" filesystem that silently falls back
+   to an unbounded one is worse than no bound at all.
+
+   So, in addition: **a function that returns a path the caller will write to
+   must verify that path**, and the caller must verify it again. Belt and braces,
+   because `errexit` is not a safety mechanism — it is a convenience, and it has
+   at least one hole in it per shell.
 10. **Idempotent.** Running `break.sh` twice does not deepen the damage; running
     `reset.sh` twice is harmless.
 
@@ -131,6 +146,7 @@ breakfix-lab/
   lib/assert.sh           assertion helpers for check scripts, with pass/fail output
   lib/seed.sh             seeds fake data into each app's database
   lib/load.sh             load generator: requests/sec, p50, p95, error rate (§6 stage 9)
+  lib/fs.sh               bounded loopback filesystems: make, destroy, measure (see below)
   report-template.md      the report skeleton `lab report` copies
   stages-lab/             the App A stand-in: FastAPI + Postgres + nginx, built in §3 of SETUP.md
   challenges/<id>/        one folder per challenge (format in §5)
@@ -150,6 +166,24 @@ NURSE_WEB="http://localhost:3000/"
 DB_SERVICE="db"
 BACKUP_DIR="/var/backups/lab"
 ```
+
+**Resource-exhaustion challenges run on bounded loopback filesystems, not on the
+host's volumes.** `lib/fs.sh` creates a fixed-size image, formats it, mounts it
+under `LAB_SCRATCH_MNT`, and destroys it again, refusing to touch any mount that
+is not one of its own loop devices. Three reasons, all learned the hard way:
+
+- **A break must not be able to eat a host.** Filling the root volume of a
+  machine the lab was pointed at by mistake is not recoverable by `reset.sh`.
+- **Cleanup cost is a design constraint.** The original s5-02 — a million tiny
+  files — takes minutes to create and far longer to remove, which makes
+  `reset.sh` the slowest thing in the repo and turns a twenty-minute drill into
+  an hour. A 64 MB filesystem formatted with 2048 inodes exhausts in seconds and
+  resets by reformatting, which is O(1) rather than a traversal. The lesson is
+  identical; the cost is not.
+- **The diagnosis changes with the filesystem**, so every such brief names the
+  mount point it is talking about. "The disk is full" on a lab with several
+  loopback mounts is a different investigation from the root volume filling, and
+  pretending otherwise teaches the wrong reflex.
 
 `SETUP.md` is the part that teaches before it tests. Write it as a numbered
 procedure that gets all three apps running on a fresh Ubuntu 24.04 VM with invented
@@ -258,6 +292,33 @@ way to make the symptom go away is to fix the cause, say so in `notes.md` and
 move on. But where the shortcut is obvious — `chmod 777`, `DEBUG=True`, "any
 database rather than the right database", a `NOPASSWD` entry broader than it
 needs to be — the check refuses it, and the brief never hints that it will.
+
+**A check must terminate.** Any command in a `check.sh` that can block
+indefinitely — a scan of every process's open files, a network call without a
+deadline, a lock it might wait on — is either wrapped in `timeout` or replaced
+with something that cannot hang. A check that hangs is worse than one that fails:
+a failure is information, and a hang is a drill abandoned twenty minutes in. An
+`lsof +L1` scan in s5-03 hung for twenty minutes during testing and was replaced
+by reading `/proc/*/fd` directly, which needs no external tool and cannot block.
+
+**Every absence assertion carries a positive control.** Where `check.sh` claims
+something is *gone* — no process holds the deleted file, the memory hog is
+absent, no spinning loops remain, the OOM kills have stopped — it must also prove
+that its own detection method works, by planting a known instance, requiring the
+detector to find it, removing it, and only then asserting absence. A detector
+that cannot see a planted instance makes the assertion fail with **"cannot verify
+absence"** rather than passing silently.
+
+This is the most dangerous bug class in the lab. A check that greps for a pattern
+that can never match passes every time and proves nothing, and it is invisible
+precisely when it matters: the fault is fixed, the check is green, and the green
+means nothing. `make lint` earns its credibility the same way — by having found a
+real SC2318 — and an absence assertion has to earn its own.
+
+`lib/assert.sh` provides `assert_absent <description> <detect_fn> <plant_fn>
+<clean_fn>` for this. A *measurement* is not an absence claim: "disk usage is
+under 80%" needs no control, because the number is read directly. "The file that
+filled it is gone" does.
 
 **Vary the reporter.** Briefs written in a batch drift into one voice, and a
 catalogue where every ticket sounds the same trains you to read tickets you will

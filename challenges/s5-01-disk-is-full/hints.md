@@ -1,0 +1,5 @@
+Trust `df` and distrust the `du` command that was run. The difference between them is almost always either a file nobody listed or a file nobody can list — start by establishing which of those it is.
+`du -sh /srv/lab-scratch/uploads/*` skips dotfiles and dot-directories entirely, because the shell glob never matched them. Run `du -xh --max-depth=2 /srv/lab-scratch/uploads` instead, or `find` with a size predicate.
+`sudo find /srv/lab-scratch/uploads -xdev -type f -size +64M -exec ls -lh {} +` lists every large file on that filesystem and nothing on any other. `-xdev` matters: without it you will wander into other mounts and misattribute what you find.
+There is a single large file under a dot-directory. Look at who owns it and when it was last modified before deleting it — that is the only evidence of what put it there.
+Delete the file, then confirm with `df -h` that the space came back on that filesystem. Deleting other things to make the number go down leaves the actual file in place, which is why the check looks for the file and not only at the percentage.

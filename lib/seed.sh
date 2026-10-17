@@ -10,6 +10,9 @@
 # Re-running tops the tables up to the target rather than duplicating, so this
 # is safe to run twice.
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 SEED_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LAB_ROOT="$(cd -- "$SEED_LIB_DIR/.." && pwd)"

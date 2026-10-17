@@ -1,0 +1,6 @@
+The previous engineer's observations are all correct and the conclusion does not follow. A `df`/`du` gap of exactly the missing amount has a much more common cause than corruption, and it does not require unmounting anything.
+Space is only returned when the last reference to a file goes away. Removing a directory entry is not enough if a process still holds the file open — the blocks stay allocated and no path exists to find them, which is precisely why `du` and `find` cannot see them.
+`sudo lsof -nP +L1` lists open files whose link count is zero — files that have been deleted and are still held. If lsof is slow or unavailable, `sudo ls -l /proc/*/fd/* 2>/dev/null | grep deleted` finds the same thing straight from /proc, and faster.
+One process is holding a deleted file of about the missing size. Note its pid and the file descriptor number before you do anything.
+You do not need to kill it, and the handover note asks you not to. Writing nothing to the descriptor releases the blocks while the process keeps running: `sudo truncate -s 0 /proc/<pid>/fd/<n>`, or `sudo sh -c ': > /proc/<pid>/fd/<n>'`. Check `df` immediately afterwards.
+Killing the process would also return the space, and the check requires the process to still be running, because in a real incident that process is the evidence and sometimes it is the production service.

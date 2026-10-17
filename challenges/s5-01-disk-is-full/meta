@@ -1,0 +1,9 @@
+STAGE=5
+TYPE=incident
+TITLE="Disk is full"
+LEVEL=2
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

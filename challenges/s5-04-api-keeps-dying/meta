@@ -1,0 +1,9 @@
+STAGE=5
+TYPE=incident
+TITLE="The API keeps dying at random"
+LEVEL=3
+APPS=nurse
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

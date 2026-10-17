@@ -5,6 +5,9 @@
 #   check.sh --arm   record the boot id, then reboot the VM
 #   check.sh         assert it came back unaided
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 LAB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=lib/guard.sh

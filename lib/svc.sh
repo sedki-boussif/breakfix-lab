@@ -6,6 +6,9 @@
 # Every function takes an app (stages|leaves|nurse|db|nginx) and an optional
 # role (web|api). Names and units come from lab.conf, never from here.
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 # How a given app is run. RUN_MODE is the default; <APP>_MODE overrides it,
 # because the lab does not run all three the same way — leaves starts life as

@@ -2,6 +2,9 @@
 # s3-04 — break: empty STATIC_ROOT and remove the WhiteNoise manifest. HTML
 # still renders; every asset 404s.
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 LAB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=lib/guard.sh

@@ -9,6 +9,9 @@
 #
 # Refusal exit code is 97. Refusing wrongly is cheap; running wrongly is not.
 set -euo pipefail
+# errexit does not reach inside $(...) unless this is set, so a function that
+# fails mid-way would otherwise return its partial output with status 0.
+shopt -s inherit_errexit
 
 # --- the gate ---------------------------------------------------------------
 

@@ -1,0 +1,9 @@
+STAGE=5
+TYPE=incident
+TITLE="Disk full, and nothing big to delete"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

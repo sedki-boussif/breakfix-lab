@@ -83,5 +83,23 @@ NURSE_LIST="http://localhost:8000/api/theses/"   # the list endpoint; confirm th
 STAGES_UPLOADS_VOLUME="stages_uploads"       # docker volume name, from `docker volume ls`
 DEV_USER="dev1"                              # the over-privileged account in s3-07
 
+# --- bounded filesystems for the stage 5 resource drills --------------------
+# The exhaustion challenges run on their own loopback filesystems so a break
+# cannot fill a volume that matters, and so reset is a reformat rather than a
+# traversal. lib/fs.sh creates and destroys these on demand; nothing persists
+# between challenges except the empty filesystem a reset leaves mounted. Each
+# brief names the mount it affects.
+LAB_SCRATCH_DIR="/var/lib/breakfix-lab"      # where the images live
+LAB_SCRATCH_MNT="/srv/lab-scratch"           # parent of every lab mount point
+S5_UPLOADS_MB="512"                          # s5-01: the filesystem that fills
+S5_LOGS_MB="512"                             # s5-03: the log volume
+S5_SPOOL_MB="64"                             # s5-02: small, and starved of...
+S5_SPOOL_INODES="2048"                       # ...inodes, so it exhausts in seconds
+S5_SURVIVE_SECONDS="180"                     # s5-04: the window the app must survive
+S5_MEM_FLOOR_MB="256"                        # s5-04: a memory limit below this is the fault
+S5_HOG_MB="256"                              # s5-04: the red herring, bounded so it cannot eat the host
+S5_HOG_NAME="indexer-warmup"                 # s5-04: the name it runs under
+S5_SPIN_NAME="apt-cache-gen"                 # s5-05: the name the loops run under
+
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"
