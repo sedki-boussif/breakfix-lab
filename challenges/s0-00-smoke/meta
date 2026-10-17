@@ -1,0 +1,8 @@
+STAGE=0
+TYPE=incident
+TITLE="Smoke test: the status page stopped answering"
+LEVEL=1
+APPS=system
+NEEDS=
+SNAPSHOT=clean
+RISK=

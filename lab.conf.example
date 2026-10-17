@@ -1,0 +1,39 @@
+# lab.conf — everything environment-specific lives here, so no challenge ever
+# hard-codes a path. Copy to lab.conf and edit. lab.conf is gitignored.
+#
+#   cp lab.conf.example lab.conf
+
+RUN_MODE="compose"            # or "systemd"
+
+# --- the three apps ---------------------------------------------------------
+# STAGES_DIR points at the stand-in app by default (see stages-lab/README.md).
+# Point it at the real private app later without touching any challenge.
+STAGES_DIR="/opt/stages";  STAGES_URL="http://localhost:8080/"
+LEAVES_DIR="/opt/leaves";  LEAVES_URL="http://localhost:8081/etoile-formation-conge/"
+NURSE_DIR="/opt/nurse";    NURSE_API="http://localhost:8000/api/health/"
+NURSE_WEB="http://localhost:3000/"
+DB_SERVICE="db"
+BACKUP_DIR="/var/backups/lab"
+
+# --- compose mode -----------------------------------------------------------
+# Compose project name per app, and the service name for each role.
+STAGES_PROJECT="stages"; STAGES_WEB="web"; STAGES_API="api"
+LEAVES_PROJECT="leaves"; LEAVES_WEB="web"; LEAVES_API="web"
+NURSE_PROJECT="nurse";   NURSE_WEB_SVC="web"; NURSE_API_SVC="api"
+
+# --- systemd mode -----------------------------------------------------------
+# Unit name per app and role. Only read when RUN_MODE="systemd".
+STAGES_WEB_UNIT="stages-web.service"; STAGES_API_UNIT="stages-api.service"
+LEAVES_WEB_UNIT="leaves.service";     LEAVES_API_UNIT="leaves.service"
+NURSE_WEB_UNIT="nurse-web.service";   NURSE_API_UNIT="nurse-api.service"
+DB_UNIT="postgresql.service"
+NGINX_UNIT="nginx.service"
+
+# --- host facts -------------------------------------------------------------
+# The VM's own LAN address. Needed by the networking challenges, which must
+# reach the VM as a laptop would rather than over loopback. Leave empty and
+# those challenges will tell you to set it.
+LAB_LAN_IP=""
+
+# Port the throwaway smoke-test challenge serves on. Any free high port.
+SMOKE_PORT="18099"

@@ -1,0 +1,12 @@
+# Never commit the local environment or anything the lab produces.
+lab.conf
+reports/
+work/
+*.env
+*.key
+*.dump
+*.tar.age
+
+# Editor and OS noise
+*.swp
+.DS_Store
