@@ -5,13 +5,13 @@
 # here; individual break, check and reset scripts escalate where they need to,
 # so you can see exactly what is being escalated.
 #
-# Checkpoint 1 implements: list start hint check report reset.
-# Checkpoint 2 adds: solution status next (and later, chaos).
+# `lab chaos` arrives with stage 9, which needs the catalogue to exist first.
 set -euo pipefail
 
 LAB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CHALLENGE_DIR="$LAB_ROOT/challenges"
 PROGRESS_DIR="${HOME}/.breakfix-progress/progress"
+STATE_DIR="${HOME}/.breakfix-progress/state"
 
 if [[ -t 1 ]]; then
   C_TITLE=$'\033[1;36m'; C_PASS=$'\033[32m'; C_FAIL=$'\033[31m'; C_OFF=$'\033[0m'
@@ -25,17 +25,21 @@ usage() {
   cat <<'EOF'
 lab — break-fix lab
 
-  lab list              every challenge, with a tick when passed
-  lab start <id>        print the brief, then break something
-  lab hint <id>         reveal the next hint
-  lab check <id>        prove the fix
-  lab report <id>       start the report for a challenge
-  lab reset <id>        undo the break
+  lab list                  every challenge, with a tick when passed
+  lab next                  the next challenge you are ready for
+  lab start <id>            print the brief, then break something
+  lab hint <id>             reveal one more hint
+  lab check <id> [args]     prove the fix (pass --arm to the two-phase checks)
+  lab report <id>           start the report for a challenge
+  lab solution <id>         the model answer, once you have passed
+  lab solution <id> --give-up    read it anyway, and mark the challenge unpassed
+  lab reset <id>            undo the break
+  lab status                what is broken right now, and since when
 
-Not yet built (checkpoint 2): solution, status, next.
+`lab chaos` arrives with stage 9.
 
-Copy lab.conf.example to lab.conf before starting anything. Only `list` and
-`--help` work without it.
+Only `list` and `--help` work without lab.conf:
+  cp lab.conf.example lab.conf
 EOF
 }
 
@@ -43,7 +47,8 @@ EOF
 
 load_conf() {
   local conf="$LAB_ROOT/lab.conf"
-  [[ -f "$conf" ]] || die "no lab.conf yet — run: cp $LAB_ROOT/lab.conf.example $LAB_ROOT/lab.conf  and edit it"
+  [[ -f "$conf" ]] ||
+    die "no lab.conf yet — run: cp $LAB_ROOT/lab.conf.example $LAB_ROOT/lab.conf  and edit it"
   # shellcheck source=/dev/null
   . "$conf"
 }
@@ -55,36 +60,52 @@ challenge_path() {
   printf '%s\n' "$path"
 }
 
-# Sets STAGE TYPE TITLE LEVEL APPS NEEDS SNAPSHOT for one challenge.
+challenge_ids() {
+  local path
+  for path in "$CHALLENGE_DIR"/*/; do
+    [[ -d "$path" ]] || continue
+    basename "$path"
+  done
+}
+
+# Sets STAGE TYPE TITLE LEVEL APPS NEEDS SNAPSHOT RISK for one challenge.
 # shellcheck disable=SC2034  # read by callers, and by meta files themselves
 load_meta() {
   local path="$1"
-  STAGE=''; TYPE=''; TITLE=''; LEVEL=''; APPS=''; NEEDS=''; SNAPSHOT=''
+  STAGE=''; TYPE=''; TITLE=''; LEVEL=''; APPS=''; NEEDS=''; SNAPSHOT=''; RISK=''
   [[ -f "$path/meta" ]] || die "$path has no meta file"
   # shellcheck source=/dev/null
   . "$path/meta"
+  [[ "$TYPE" == mission || "$TYPE" == incident ]] ||
+    die "$(basename "$path"): meta has TYPE='$TYPE', wanted mission or incident"
 }
 
-# --- progress ---------------------------------------------------------------
+# --- progress and state -----------------------------------------------------
+# progress/ is this CLI's record of how you are doing. state/ is what the
+# break and reset scripts write about the machine.
 
-progress_file() { mkdir -p "$PROGRESS_DIR"; printf '%s\n' "$PROGRESS_DIR/$1"; }
-
-progress_get() {
-  local id="$1" key="$2" default="${3:-}" file line
-  file="$PROGRESS_DIR/$id"
+kv_get() {
+  local file="$1" key="$2" default="${3:-}" line
   [[ -f "$file" ]] || { printf '%s\n' "$default"; return 0; }
   line="$(grep -m1 "^${key}=" "$file" || true)"
-  [[ -n "$line" ]] && printf '%s\n' "${line#*=}" || printf '%s\n' "$default"
+  if [[ -n "$line" ]]; then printf '%s\n' "${line#*=}"
+  else printf '%s\n' "$default"; fi
 }
+
+progress_get() { kv_get "$PROGRESS_DIR/$1" "$2" "${3:-}"; }
+state_get()    { kv_get "$STATE_DIR/$1/vars" "$2" "${3:-}"; }
 
 progress_set() {
   local id="$1" key="$2" value="$3" file
-  file="$(progress_file "$id")"
+  mkdir -p "$PROGRESS_DIR"
+  file="$PROGRESS_DIR/$id"
   touch "$file"
   grep -v "^${key}=" "$file" >"${file}.new" 2>/dev/null || true
   printf '%s=%s\n' "$key" "$value" >>"${file}.new"
   mv "${file}.new" "$file"
 }
+
+is_passed() { [[ "$(progress_get "$1" STATUS '')" == passed ]]; }
 
 human_elapsed() {
   local secs="$1"
@@ -107,63 +128,132 @@ elapsed_for() {
 # --- commands ---------------------------------------------------------------
 
 cmd_list() {
-  local path id passed mark
-  printf '%-26s %-5s %-9s %-6s %s\n' ID STAGE TYPE DONE TITLE
-  for path in "$CHALLENGE_DIR"/*/; do
-    [[ -d "$path" ]] || continue
-    id="$(basename "$path")"
+  local path id status mark colour width
+  printf '%-26s %-5s %-9s %-7s %s\n' ID STAGE TYPE DONE TITLE
+  for id in $(challenge_ids); do
+    path="$CHALLENGE_DIR/$id"
     load_meta "$path"
-    passed="$(progress_get "$id" STATUS '')"
-    case "$passed" in
-      passed)  mark="${C_PASS}✓${C_OFF}" ;;
-      started) mark="$(elapsed_for "$id")" ;;
-      *)       mark='·' ;;
+    status="$(progress_get "$id" STATUS '')"
+    # A tick and a dot are one column wide but several bytes, and colour codes
+    # are no columns at all, so pad on display width rather than on %-7s.
+    case "$status" in
+      passed)  mark='✓'; colour="$C_PASS"; width=1 ;;
+      started) mark="$(elapsed_for "$id")"; colour=''; width=${#mark} ;;
+      *)       mark='·'; colour=''; width=1 ;;
     esac
-    printf '%-26s %-5s %-9s %-6b %s\n' "$id" "$STAGE" "$TYPE" "$mark" "$TITLE"
+    printf '%-26s %-5s %-9s ' "$id" "$STAGE" "$TYPE"
+    printf '%s%s%s' "$colour" "$mark" "${colour:+$C_OFF}"
+    printf '%*s%s\n' "$(( 8 - width ))" '' "$TITLE"
   done
 }
 
+cmd_next() {
+  local id path need blocked candidate=''
+  load_conf
+  for id in $(challenge_ids); do
+    is_passed "$id" && continue
+    path="$CHALLENGE_DIR/$id"
+    load_meta "$path"
+    blocked=''
+    for need in $NEEDS; do
+      is_passed "$need" || blocked+="$need "
+    done
+    if [[ -n "$blocked" ]]; then continue; fi
+    candidate="$id"
+    break
+  done
+
+  if [[ -z "$candidate" ]]; then
+    local unpassed=''
+    for id in $(challenge_ids); do is_passed "$id" || unpassed+="$id "; done
+    if [[ -z "$unpassed" ]]; then
+      printf 'Everything is passed. Write the runbooks while it is fresh.\n'
+    else
+      printf 'Nothing is ready: every unpassed challenge is waiting on a prerequisite.\n'
+      printf 'Still to do: %s\n' "$unpassed"
+    fi
+    return 0
+  fi
+
+  load_meta "$CHALLENGE_DIR/$candidate"
+  printf '\n%s%s — %s%s\n' "$C_TITLE" "$candidate" "$TITLE" "$C_OFF"
+  printf 'stage %s   %s   level %s   apps: %s   snapshot: %s\n' \
+    "$STAGE" "$TYPE" "$LEVEL" "${APPS:-none}" "$SNAPSHOT"
+  [[ "$RISK" != irreversible ]] ||
+    printf '%sThis one cannot be undone. Snapshot first.%s\n' "$C_FAIL" "$C_OFF"
+  if [[ "$(progress_get "$candidate" STATUS '')" == started ]]; then
+    printf '\nAlready in progress for %s: lab check %s\n' "$(elapsed_for "$candidate")" "$candidate"
+  else
+    printf '\n  lab start %s\n' "$candidate"
+  fi
+}
+
 cmd_start() {
-  local id="$1" path answer
+  local id="$1" path answer status
   path="$(challenge_path "$id")"
   load_conf
   load_meta "$path"
+
+  local need unmet=''
+  for need in $NEEDS; do
+    is_passed "$need" || unmet+="$need "
+  done
+  [[ -z "$unmet" ]] || die "$id needs these passed first: $unmet"
 
   printf '\n%s%s — %s%s\n' "$C_TITLE" "$id" "$TITLE" "$C_OFF"
   printf 'level %s   apps: %s   snapshot: %s\n\n' "$LEVEL" "${APPS:-none}" "$SNAPSHOT"
   cat "$path/brief.md"
   printf '\n'
 
+  status="$(progress_get "$id" STATUS '')"
+  if [[ "$status" == passed ]]; then
+    printf 'You have already passed this one. Start it again from scratch? Type yes: '
+    read -r answer
+    [[ "$answer" == "yes" ]] || die "left alone"
+    progress_set "$id" STARTED_AT 0
+    progress_set "$id" HINTS_USED 0
+    progress_set "$id" SOLUTION_SEEN 0
+  fi
+
   if [[ "$TYPE" == "incident" ]]; then
+    if [[ "$RISK" == irreversible ]]; then
+      printf '%s' "$C_FAIL"
+      printf 'This break CANNOT be undone by reset.sh.\n'
+      printf 'You will need the snapshot, and possibly the hypervisor console.\n'
+      printf '%s' "$C_OFF"
+    fi
     printf 'This will break something. It expects the "%s" snapshot.\n' "$SNAPSHOT"
     printf 'Do you have a snapshot you can roll back to? Type yes: '
     read -r answer
     [[ "$answer" == "yes" ]] || die "not started — take a snapshot first"
     LAB_ID="$id" bash "$path/break.sh"
   else
-    printf 'This is a mission: nothing is broken. Build it, then: lab check %s\n' "$id"
+    printf 'This is a mission: nothing is broken.\n'
+    printf 'Build it, then prove it with: lab check %s\n' "$id"
+    printf 'What the check will hold you to is in the brief above.\n'
   fi
 
   progress_set "$id" STATUS started
   [[ "$(progress_get "$id" STARTED_AT 0)" != 0 ]] || progress_set "$id" STARTED_AT "$(date +%s)"
   progress_set "$id" PASSED_AT 0
-  printf '\nTimer started. When you think it is fixed: lab check %s\n' "$id"
+  printf '\nTimer started. When you think it is done: lab check %s\n' "$id"
 }
 
 cmd_hint() {
-  local id="$1" path used total
+  local id="$1" path used total hint
   path="$(challenge_path "$id")"
+  load_conf
   used="$(progress_get "$id" HINTS_USED 0)"
   total="$(grep -cve '^[[:space:]]*$' "$path/hints.md")"
   if (( used >= total )); then
-    printf 'No hints left (%d of %d used). Try: lab solution %s --give-up\n' \
-      "$used" "$total" "$id"
+    printf 'No hints left (%d of %d used).\n' "$used" "$total"
+    printf 'If you are properly stuck: lab solution %s --give-up\n' "$id"
     return 0
   fi
   used=$(( used + 1 ))
   progress_set "$id" HINTS_USED "$used"
-  printf '\nHint %d of %d:\n%s\n\n' "$used" "$total" \
-    "$(grep -ve '^[[:space:]]*$' "$path/hints.md" | sed -n "${used}p")"
+  hint="$(grep -ve '^[[:space:]]*$' "$path/hints.md" | sed -n "${used}p")"
+  printf '\nHint %d of %d:\n%s\n\n' "$used" "$total" "$hint"
 }
 
 cmd_check() {
@@ -185,7 +275,7 @@ cmd_check() {
     printf 'Write it up while it is fresh: lab report %s\n' "$id"
   else
     printf '\n%sNOT FIXED%s  (check.sh exited %d)\n' "$C_FAIL" "$C_OFF" "$status"
-    (( status != 97 )) || printf 'Exit 97 is the safety gate: see lib/guard.sh\n'
+    (( status != 97 )) || printf 'Exit 97 is the safety gate refusing: see lib/guard.sh\n'
     return 1
   fi
 }
@@ -193,6 +283,7 @@ cmd_check() {
 cmd_report() {
   local id="$1" path dest
   path="$(challenge_path "$id")"
+  load_conf
   load_meta "$path"
   mkdir -p "$LAB_ROOT/reports"
   dest="$LAB_ROOT/reports/${id}.md"
@@ -202,13 +293,70 @@ cmd_report() {
   printf 'Report started: %s\n' "$dest"
 }
 
+cmd_solution() {
+  local id="$1" give_up="${2:-}" path file
+  path="$(challenge_path "$id")"
+  load_conf
+  load_meta "$path"
+  file="$LAB_ROOT/solutions/${id}.md"
+
+  if ! is_passed "$id"; then
+    if [[ "$give_up" != "--give-up" ]]; then
+      printf 'Not passed yet, so the model answer stays shut.\n'
+      printf 'Try one more hint (lab hint %s), or give up on your own terms:\n' "$id"
+      printf '  lab solution %s --give-up\n' "$id"
+      return 1
+    fi
+    progress_set "$id" STATUS started
+    progress_set "$id" PASSED_AT 0
+    progress_set "$id" SOLUTION_SEEN 1
+    printf '%sMarked unpassed.%s Read it, then come back and do it yourself.\n\n' \
+      "$C_FAIL" "$C_OFF"
+  elif [[ "$give_up" == "--give-up" ]]; then
+    progress_set "$id" STATUS started
+    progress_set "$id" PASSED_AT 0
+    progress_set "$id" SOLUTION_SEEN 1
+    printf '%sMarked unpassed%s, as asked.\n\n' "$C_FAIL" "$C_OFF"
+  fi
+
+  [[ -f "$file" ]] || die "no model answer written yet: $file"
+  cat "$file"
+}
+
 cmd_reset() {
   local id="$1" path
   path="$(challenge_path "$id")"
   load_conf
+  load_meta "$path"
+  if [[ "$RISK" == irreversible ]]; then
+    printf '%sreset.sh cannot undo this one.%s Roll back the snapshot instead.\n' \
+      "$C_FAIL" "$C_OFF"
+  fi
   LAB_ID="$id" bash "$path/reset.sh"
   progress_set "$id" STATUS reset
   printf 'Reset: %s\n' "$id"
+}
+
+cmd_status() {
+  local id broken_at status seen n=0
+  load_conf
+  for id in $(challenge_ids); do
+    status="$(progress_get "$id" STATUS '')"
+    broken_at="$(state_get "$id" BROKEN_AT 0)"
+    [[ "$status" == started ]] || continue
+    load_meta "$CHALLENGE_DIR/$id"
+    n=$(( n + 1 ))
+    if (( broken_at > 0 )); then
+      printf '%-26s broken since %s (%s)\n' "$id" \
+        "$(date -d "@$broken_at" '+%a %H:%M')" "$(elapsed_for "$id")"
+    else
+      printf '%-26s in progress for %s\n' "$id" "$(elapsed_for "$id")"
+    fi
+    seen=''
+    [[ "$(progress_get "$id" SOLUTION_SEEN 0)" != 1 ]] || seen=', model answer read'
+    printf '  %s — %s hint(s)%s\n' "$TITLE" "$(progress_get "$id" HINTS_USED 0)" "$seen"
+  done
+  (( n > 0 )) || printf 'Nothing is broken and nothing is in progress. Try: lab next\n'
 }
 
 # --- dispatch ---------------------------------------------------------------
@@ -217,14 +365,17 @@ main() {
   local cmd="${1:-}"
   [[ -d "$CHALLENGE_DIR" ]] || die "no challenges directory at $CHALLENGE_DIR"
   case "$cmd" in
-    list)        cmd_list ;;
-    start)       [[ $# -ge 2 ]] || die "usage: lab start <id>";  cmd_start "$2" ;;
-    hint)        [[ $# -ge 2 ]] || die "usage: lab hint <id>";   cmd_hint "$2" ;;
-    check)       [[ $# -ge 2 ]] || die "usage: lab check <id>";  shift; cmd_check "$@" ;;
-    report)      [[ $# -ge 2 ]] || die "usage: lab report <id>"; cmd_report "$2" ;;
-    reset)       [[ $# -ge 2 ]] || die "usage: lab reset <id>";  cmd_reset "$2" ;;
-    solution|status|next|chaos)
-      die "'$cmd' is not built yet (checkpoint 2)" ;;
+    list)     cmd_list ;;
+    next)     cmd_next ;;
+    status)   cmd_status ;;
+    start)    [[ $# -ge 2 ]] || die "usage: lab start <id>";  cmd_start "$2" ;;
+    hint)     [[ $# -ge 2 ]] || die "usage: lab hint <id>";   cmd_hint "$2" ;;
+    check)    [[ $# -ge 2 ]] || die "usage: lab check <id> [args]"; shift; cmd_check "$@" ;;
+    report)   [[ $# -ge 2 ]] || die "usage: lab report <id>"; cmd_report "$2" ;;
+    reset)    [[ $# -ge 2 ]] || die "usage: lab reset <id>";  cmd_reset "$2" ;;
+    solution) [[ $# -ge 2 ]] || die "usage: lab solution <id> [--give-up]"
+              cmd_solution "$2" "${3:-}" ;;
+    chaos)    die "'chaos' arrives with stage 9, once the catalogue exists" ;;
     ''|-h|--help|help) usage ;;
     *) usage; die "unknown command: $cmd" ;;
   esac
