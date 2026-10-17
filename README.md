@@ -56,12 +56,25 @@ lab list
 
 ```
 lab list            every challenge, with a tick when passed
+lab next            the next one you are ready for
 lab start <id>      the brief, then the break
 lab hint <id>       one more hint
 lab check <id>      prove the fix
 lab report <id>     write it up
 lab reset <id>      undo the break
+lab status          what is broken right now
+lab doctor          diagnose the lab itself
 ```
+
+**When something behaves oddly, `lab doctor` first.** It reads only, never
+refuses to run, and every failure it reports comes with the next command. If it
+is clean, the fault is the challenge or you — and `SOLO.md` §1 decides which in
+about two minutes.
+
+`SOLO.md` is the handbook for running this with nobody to ask: telling a broken
+check from an unfinished fix, reading a check to see what it wants, keeping
+`PROVEN` honest, fixing a check that is wrong on your hardware, writing a new
+challenge, and getting out of a state `reset.sh` will not clear.
 
 ## Safety
 

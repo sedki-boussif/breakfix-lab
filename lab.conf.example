@@ -1,6 +1,10 @@
 # lab.conf — everything environment-specific lives here, so no challenge ever
 # hard-codes a path. Copy to lab.conf and edit. lab.conf is gitignored.
 #
+# One assignment per line, deliberately: a sed on a line holding two of them
+# silently deletes the second, and `lab doctor` then reports an empty value you
+# never touched. That is how it was found.
+#
 #   cp lab.conf.example lab.conf
 
 # URLs use 127.0.0.1 rather than localhost on purpose: every container here
@@ -24,26 +28,38 @@ NURSE_MODE="systemd"
 # --- the three apps ---------------------------------------------------------
 # STAGES_DIR points at the stand-in app by default (see stages-lab/README.md).
 # Point it at the real private app later without touching any challenge.
-STAGES_DIR="/opt/stages";  STAGES_URL="http://127.0.0.1:8080/"
-LEAVES_DIR="/opt/leaves";  LEAVES_URL="http://127.0.0.1:8081/etoile-formation-conge/"
-NURSE_DIR="/opt/nurse";    NURSE_API="http://127.0.0.1:8000/api/health/"
+STAGES_DIR="/opt/stages"
+STAGES_URL="http://127.0.0.1:8080/"
+LEAVES_DIR="/opt/leaves"
+LEAVES_URL="http://127.0.0.1:8081/etoile-formation-conge/"
+NURSE_DIR="/opt/nurse"
+NURSE_API="http://127.0.0.1:8000/api/health/"
 NURSE_WEB="http://127.0.0.1:3000/"           # the host nginx block serving dist/
 DB_SERVICE="db"
 BACKUP_DIR="/var/backups/lab"
 
 # --- compose mode -----------------------------------------------------------
 # Compose project name per app, and the service name for each role.
-STAGES_PROJECT="stages"; STAGES_WEB="web"; STAGES_API="api"
-LEAVES_PROJECT="leaves"; LEAVES_WEB="web"; LEAVES_API="web"
-NURSE_PROJECT="nurse";   NURSE_WEB_SVC="web"; NURSE_API_SVC="api"
+STAGES_PROJECT="stages"
+STAGES_WEB="web"
+STAGES_API="api"
+LEAVES_PROJECT="leaves"
+LEAVES_WEB="web"
+LEAVES_API="web"
+NURSE_PROJECT="nurse"
+NURSE_WEB_SVC="web"
+NURSE_API_SVC="api"
 
 # --- systemd mode -----------------------------------------------------------
 # Unit name per app and role. Only read when RUN_MODE="systemd".
-STAGES_WEB_UNIT="stages-web.service"; STAGES_API_UNIT="stages-api.service"
-LEAVES_WEB_UNIT="leaves.service";     LEAVES_API_UNIT="leaves.service"
+STAGES_WEB_UNIT="stages-web.service"
+STAGES_API_UNIT="stages-api.service"
+LEAVES_WEB_UNIT="leaves.service"
+LEAVES_API_UNIT="leaves.service"
 # Empty on purpose: the built frontend is static files served by the host
 # nginx, so there is no unit for it. Set it if you containerise nurse in s6-07.
-NURSE_WEB_UNIT="";   NURSE_API_UNIT="nurse-api.service"
+NURSE_WEB_UNIT=""
+NURSE_API_UNIT="nurse-api.service"
 DB_UNIT="postgresql.service"
 NGINX_UNIT="nginx.service"
 

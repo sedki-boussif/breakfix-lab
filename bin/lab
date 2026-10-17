@@ -38,6 +38,8 @@ lab — break-fix lab
   lab solution <id> --give-up    read it anyway, and mark the challenge unpassed
   lab reset <id>            undo the break
   lab status                what is broken right now, and since when
+  lab doctor                diagnose the lab itself, when you cannot tell
+                            whether the fault is the lab or you
 
 `lab chaos` arrives with stage 9.
 
@@ -53,6 +55,15 @@ load_conf() {
   local conf="$LAB_ROOT/lab.conf"
   [[ -f "$conf" ]] ||
     die "no lab.conf yet — run: cp $LAB_ROOT/lab.conf.example $LAB_ROOT/lab.conf  and edit it"
+  # shellcheck source=/dev/null
+  . "$conf"
+}
+
+# Like load_conf, but never refuses: `lab doctor` has to work on a broken lab,
+# and a missing lab.conf is something it reports rather than something it dies of.
+load_conf_if_present() {
+  local conf="$LAB_ROOT/lab.conf"
+  [[ -f "$conf" ]] || return 0
   # shellcheck source=/dev/null
   . "$conf"
 }
@@ -367,6 +378,10 @@ main() {
     list)     cmd_list ;;
     next)     cmd_next ;;
     status)   cmd_status ;;
+    doctor)   load_conf_if_present
+              # shellcheck source=lib/doctor.sh
+              . "$LAB_ROOT/lib/doctor.sh"
+              cmd_doctor ;;
     start)    [[ $# -ge 2 ]] || die "usage: lab start <id>";  cmd_start "$2" ;;
     hint)     [[ $# -ge 2 ]] || die "usage: lab hint <id>";   cmd_hint "$2" ;;
     check)    [[ $# -ge 2 ]] || die "usage: lab check <id> [args]"; shift; cmd_check "$@" ;;

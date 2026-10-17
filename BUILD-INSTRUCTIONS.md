@@ -182,6 +182,7 @@ breakfix-lab/
   lib/seed.sh             seeds fake data into each app's database
   lib/load.sh             load generator: requests/sec, p50, p95, error rate (§6 stage 9)
   lib/fs.sh               bounded loopback filesystems: make, destroy, measure (see below)
+  lib/doctor.sh           `lab doctor`: diagnoses the lab itself and names the next command
   report-template.md      the report skeleton `lab report` copies
   stages-lab/             the App A stand-in: FastAPI + Postgres + nginx, built in §3 of SETUP.md
   challenges/<id>/        one folder per challenge (format in §5)
@@ -245,6 +246,7 @@ the repo.
 | `lab reset <id>` | Runs `reset.sh`. |
 | `lab status` | What is currently broken, since when. |
 | `lab next` | Suggests the lowest-numbered unpassed challenge whose prerequisites are met. |
+| `lab doctor` | Diagnoses the lab itself: every `lab.conf` value set and pointing at something real, every app answering on its configured URL, every expected unit or container present with its mode matching config, the marker, the required tools, loop devices, seed volumes, writable state directories, and anything left broken. One line per check, failures first, and **every failure carries the next command to run**. It never refuses — no marker, no `lab.conf` and no `sudo` are required, and anything it cannot check becomes a warning that says why — because it is the tool to reach for when the lab is broken, which is exactly when a tool that refuses is useless. It changes nothing. |
 
 Design notes:
 

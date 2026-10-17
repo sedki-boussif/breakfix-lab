@@ -263,6 +263,27 @@ Send `~/lab-first-run.log` if it is not too large; `gzip` it if it is.
 
 ---
 
+## 6b. Before you report anything: run lab doctor
+
+```bash
+lab doctor
+```
+
+It checks the lab rather than the challenge: every `lab.conf` value pointing at
+something real, every app answering where config says, every unit or container
+present with its mode matching, the marker, the tools, loop devices, seed
+volumes, writable state, and anything left broken. Failures print first and each
+carries the next command.
+
+Paste its output into your report. If it is clean, say so — "lab doctor clean"
+tells me the fault is in a challenge and not in the ground it stands on, which
+halves the search.
+
+`SOLO.md` is the companion to this: what to do about each kind of failure when
+there is nobody to ask.
+
+---
+
 ## 7. When something fails, capture these four things
 
 "It didn't work" costs us a round trip. These four make it one:
