@@ -1,0 +1,9 @@
+STAGE=9
+TYPE=incident
+TITLE="Slow, but only under load"
+LEVEL=4
+APPS=nurse
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

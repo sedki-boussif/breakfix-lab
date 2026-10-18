@@ -1,0 +1,9 @@
+STAGE=9
+TYPE=incident
+TITLE="Nothing is wrong"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

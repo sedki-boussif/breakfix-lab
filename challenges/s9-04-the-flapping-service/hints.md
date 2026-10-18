@@ -1,0 +1,6 @@
+"Up whenever you look" and "sessions lost at random" are the same observation from two directions. A service that is always up when checked and loses state is a service that is restarting between checks.
+Ask for history rather than status. `systemctl show -p NRestarts --value leaves` and `systemctl status leaves` — the status line includes how long the *current* main process has been running, which is the number that matters.
+A restart counter in the dozens and an uptime of four minutes on a service nobody has touched in a week is the whole answer. Now find out why it exits.
+`journalctl -u leaves --since '2 hours ago'` with the restarts visible: look at what it logs immediately before each exit, and at the exit code systemd records. `Restart=on-failure` means it restarts quietly, which is why nothing looks wrong.
+Fix the cause, then watch the counter. The number has to stop moving — a service that restarts every four minutes instead of every two is not fixed.
+Sessions are stored in the application's memory, which is why a restart loses them. Worth noting in the report: moving sessions to the database or a cache makes this class of fault invisible to users, which is either a good thing or a way to hide it, depending on whether you also alert on the restarts.

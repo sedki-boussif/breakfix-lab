@@ -369,5 +369,10 @@ so look hardest at them:
    `meta` enforces that. s7-06 is `PROVEN=real`: it was verified with real cron,
    real accounts and real keys, including that its key detector does not match
    your own ed25519 key.
-10. **The `clean` snapshot's `lab.conf`** is the unedited copy — `LAB_LAN_IP` is
+10. **`s9-01` needs its symptom confirmed first.** Its check is verified; its
+    break is not. `lab start s9-01-one-request-in-five`, then thirty requests in
+    a loop — roughly a third should fail. If they all pass, `notes.md` says what
+    to try. It is the one challenge where I know the fix needed and ran out of
+    today to apply it.
+11. **The `clean` snapshot's `lab.conf`** is the unedited copy — `LAB_LAN_IP` is
    empty in it. If you roll back to `clean`, redo §4 before §5.

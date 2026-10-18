@@ -198,3 +198,18 @@ TLS_KEY="/etc/nginx/tls/lab.key"
 SMOKE_PORT="18099"
 S4_04_PORT="9090"                              # s4-04: the port published for the demonstration
 S4_06_NEW_PORT="2222"                          # s4-06: where the unfinished change moved SSH
+
+# --- chaos, load and intermittent faults (stage 9) --------------------------
+S9_01_REQUESTS="100"                           # consecutive requests that must all succeed
+S9_02_CONCURRENCY="20"                         # load level for the p95 assertion
+S9_02_DURATION="20"                            # seconds of load
+S9_02_P95_MAX="1.0"                            # seconds; above this is the fault
+S9_03_WINDOW="120"                             # seconds to measure a growth rate over
+S9_03_MAX_KB_PER_MIN="64"                      # growth above this is the fault
+S9_04_MIN_UPTIME="300"                         # seconds a service must have been up
+S9_01_DEAD_PORT="8009"                         # s9-01: the upstream member with nothing on it
+S9_07_INDEX="ix_placements_ward_started"       # s9-07: the index that gets dropped
+S9_03_MB="512"                                 # s9-03: size of the filesystem that fills
+S9_04_INTERVAL="110"                           # s9-04: seconds between kills
+S9_04_WATCH="180"                              # s9-04: seconds to watch the counter
+S9_05_TZ="Europe/Tunis"                        # s9-05: the timezone the change moves to

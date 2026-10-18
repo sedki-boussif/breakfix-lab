@@ -1,0 +1,6 @@
+Start by not assuming the job is broken. `systemctl list-timers --all` shows when each timer last ran and when it will next run — and the "next" column is the one to read carefully here.
+The timer is enabled, healthy, and scheduled to fire at a time that is not when you think. `systemctl show -p OnCalendar -p NextElapseUSecRealtime <timer>` and compare the next elapse with your watch.
+`timedatectl` tells you what timezone the machine is in. A systemd timer's `OnCalendar=` is interpreted in **local** time unless the unit says otherwise, so changing the timezone moves every timer on the machine.
+Two hours is exactly the shift, and it is exactly the change made yesterday afternoon. The job did not fail — it has not been due yet, or it ran at a time nobody was looking.
+Decide deliberately rather than reverting blindly: either pin the timer to UTC (`OnCalendar=` with `UTC` appended, or `Timezone=UTC` behaviour via `OnCalendar=*-*-* 02:17:00 UTC`), or keep local time and accept that the schedule moves with the timezone — including twice a year at daylight saving.
+The report has to name the timezone change as the cause. A fix that makes the report appear again without identifying why it stopped will hold until the clocks change in March.

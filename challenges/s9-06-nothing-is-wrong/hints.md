@@ -1,0 +1,6 @@
+Do not start from the assumption that there is a fault, and do not start from the assumption that there is not. Both are conclusions, and you have not measured anything yet.
+Measure what she is describing. Response time from outside the VM, for the pages she uses, repeatedly: `curl -w '%{time_total}'` in a loop, and `lib/load.sh` for a few at once. Numbers you can show her.
+Then the machine: load average against core count, memory available, disk and inode usage, and whether any service has restarted recently. `lab doctor` does most of this in one command and tells you if the lab itself is sound.
+Then the layers between her and the server, because that is where "slow for her" can be true while the server is fine: her connection, DNS resolution time on her machine, the hop count, whether she is on wifi, whether it is slow for you from somewhere else.
+If everything measures clean, the answer is "no fault found" — and that is a legitimate finding, not a failure to investigate. Write down what you measured, what the numbers were, and what would have shown a problem if there had been one.
+The check requires exactly that: health proven, and a report that concludes no fault found with the evidence to back it. Saying "nothing is wrong" and being able to defend it is harder than finding a fault, and it is a real skill.

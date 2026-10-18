@@ -1,0 +1,6 @@
+"A reboot fixes it and it comes back over hours" describes accumulation: something grows while the machine is up and is reset when it restarts. That rules out configuration, which does not change between reboots, and points at a resource.
+At minute one there is no symptom, so a single reading tells you nothing. You need the same measurement twice, far enough apart to see a slope: disk used, inode count, memory, process count, open file descriptors, table sizes.
+Take a baseline, wait, take it again, and subtract. `df -P /`, `df -Pi /`, `free -m`, `ls /proc/<pid>/fd | wc -l`, and `du -xs` on the usual suspects. Two readings five minutes apart will show a rate that would take hours to be obvious.
+One thing is growing fast. Find it by rate, not by size: a file that is large and static is not your problem, and a small file growing at megabytes a minute is.
+Deal with the writer, not only the file. Truncating it buys you the same number of hours again; the fix is whatever is writing at that rate — and the report needs the rate before and after, which is the only proof the fix worked rather than the symptom resetting.
+`logrotate` and a size limit are the containment, not the cure. Say in the report which you did and whether the cause is actually fixed or merely bounded.

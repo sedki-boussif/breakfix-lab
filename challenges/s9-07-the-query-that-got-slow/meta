@@ -1,0 +1,9 @@
+STAGE=9
+TYPE=incident
+TITLE="The query that got slow"
+LEVEL=3
+APPS=stages
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven
