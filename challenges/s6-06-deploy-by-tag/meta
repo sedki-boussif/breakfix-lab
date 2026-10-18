@@ -1,0 +1,9 @@
+STAGE=6
+TYPE=mission
+TITLE="Deploy by tag, and roll back"
+LEVEL=3
+APPS=leaves
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-process

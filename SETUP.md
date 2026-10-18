@@ -1042,8 +1042,7 @@ half-filled means rediscovering the same six blanks every time.
 | **`s4-06`** | `deployed` | **Snapshot *and* hypervisor console required.** `RISK=irreversible`: you will lose SSH on purpose. `break.sh` makes you type `yes-i-have-console` |
 | `s5-01` … `s5-06`, `s5-08`, `s5-09` | `deployed` | Reversible. `reset.sh` undoes each one |
 | **`s5-07`** | `deployed` | **Snapshot required.** `RISK=irreversible`: a bad UUID in `/etc/fstab` boots the VM to emergency mode. Two-phase check — `check.sh --arm` before the reboot, `check.sh` after |
-| `s6-01` … `s6-04`, `s6-06`, `s6-07` | `deployed` | s6-01 needs the second disk from section 2, and the apps must keep serving throughout. s6-02 and s6-07 containerise `leaves` and `nurse`; change that app's mode in `lab.conf` when you pass one |
-| `s6-05` | `clean` | Ansible rebuilds from near-bare. The final proof — "a fresh VM reaches a working state from the playbook alone" — needs a **new VM**, not a snapshot |
+| `s6-01`, `s6-02`, `s6-06`, `s6-07` | `deployed` | s6-01 needs the second disk from section 2, and the apps must keep serving throughout. s6-02 and s6-07 containerise `leaves` and `nurse`: when you pass one, change that app's `*_MODE` **and** its `*_ENV` in `lab.conf`, per section 10. s6-06 moves the `leaves` checkout between tags and puts it back |
 | `s7-01` … `s7-06` | `deployed` | "Off-VM" is always simulated locally: a second container, a separate mount, or a second VM. Never a real cloud account |
 | **`s7-07`** | `deployed` | **Snapshot required.** `RISK=irreversible`: the fake uploads are scrambled and local backups removed |
 | `s8-01`, `s8-02`, `s8-03` | neither | These start from a **bare Ubuntu 24.04 image**. s8-02 deletes the VM on purpose; rebuilding from Git and backups alone is the exercise. Keep `deployed` so you have something to compare against |

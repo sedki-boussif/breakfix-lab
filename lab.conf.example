@@ -227,6 +227,12 @@ NURSE_COUNT_TABLE="theses_thesis"
 # deployed has to live outside the checkout.
 S6_06_DEPLOY_STATE="/var/lib/breakfix-lab/deployed-tags"
 S6_06_APP="leaves"                             # the app the tag drill runs against
+S6_06_DEPLOY_SCRIPT="/usr/local/bin/deploy.sh" # the script you write, taking a tag
+# What the check fetches to tell one deployed version from another. Default is
+# the app's own URL; point it at a stable endpoint if that page carries a CSRF
+# token or a timestamp, because a response that changes on its own cannot prove
+# a rollback changed anything.
+S6_06_PROBE_URL=""
 
 # --- the three rebuilds (stage 8) -------------------------------------------
 # The acceptance suite in lib/accept.sh reads these. It is the same suite for
