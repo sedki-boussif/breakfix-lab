@@ -233,6 +233,16 @@ S6_06_DEPLOY_SCRIPT="/usr/local/bin/deploy.sh" # the script you write, taking a 
 # token or a timestamp, because a response that changes on its own cannot prove
 # a rollback changed anything.
 S6_06_PROBE_URL=""
+# s6-03: monitoring. Whatever you build — Prometheus with Alertmanager, or
+# Netdata — it has to deliver alerts somewhere this check can read, the same
+# shape as the backup dead-man's-switch in s7-01. A file that is appended to,
+# not a journal unit. The check triggers each condition for real and requires a
+# line naming it, then clears the condition and requires the alert to clear.
+S6_03_ALERT_LOG="/var/log/lab-monitor-alerts.log"
+S6_03_RELOAD=""                                # command that makes your monitoring re-read its rules, if it needs one
+S6_03_DISK_FS="monitor"                         # name of the bounded filesystem the disk alert is tested on
+S6_03_DISK_MB="512"
+S6_03_STOP_UNIT=""                              # the unit the service-down alert is tested with; empty means leaves
 
 # --- the three rebuilds (stage 8) -------------------------------------------
 # The acceptance suite in lib/accept.sh reads these. It is the same suite for

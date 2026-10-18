@@ -1,0 +1,9 @@
+STAGE=6
+TYPE=mission
+TITLE="Monitoring that tells you first"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-process
