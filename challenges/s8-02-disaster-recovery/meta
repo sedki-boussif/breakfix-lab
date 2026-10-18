@@ -1,0 +1,9 @@
+STAGE=8
+TYPE=mission
+TITLE="Disaster recovery day"
+LEVEL=5
+APPS="stages leaves nurse"
+NEEDS="s8-01-build-from-nothing s7-02-restore-drills"
+SNAPSHOT=deployed
+RISK=irreversible
+PROVEN=unproven

@@ -285,6 +285,78 @@ accept_backup_restored() {
   fi
 }
 
+# accept_fingerprint_matches_live — every row count the archive recorded, against
+# the database now serving.
+#
+# accept_backup_restored compares one table, which is enough to prove a restore
+# happened. This compares all of them, which is the stronger claim s8-02 needs:
+# after a rebuild from backups alone, the data being served has no other source,
+# so a count that disagrees anywhere means the recovery lost something. A
+# restore that returns the wrong data quietly is the failure mode worth more
+# than the one where it returns nothing.
+#
+# The fingerprint is "table=count" per line, s7-01's format. Lines naming a
+# table the stages database does not have are reported rather than failed —
+# a fingerprint may legitimately cover more than one application — but at least
+# one line has to have been comparable, or nothing was checked.
+accept_fingerprint_matches_live() {
+  local restored="$1" compared=0 table want live
+
+  if ! lab_as_root test -s "$restored"; then
+    assert_fail "the archive's fingerprint can be read" "${restored} is missing or empty"
+    return 0
+  fi
+
+  while IFS='=' read -r table want; do
+    [[ "$table" =~ ^[a-z_][a-z0-9_]*$ ]] || continue
+    [[ "$want" =~ ^[0-9]+$ ]] || continue
+    live="$(accept_stages_count_table "$table")"
+    if [[ -z "$live" ]]; then
+      printf 'SKIP  %s is in the fingerprint but not in the stages database\n' "$table"
+      continue
+    fi
+    compared=$(( compared + 1 ))
+    assert_equal "restored ${table} matches the archive (${want})" "$live" "$want"
+  done < <(lab_as_root cat "$restored" 2>/dev/null || true)
+
+  if (( compared == 0 )); then
+    assert_fail "at least one row count was comparable" \
+      "nothing in ${restored} named a table that could be counted, so 'the data matches' was never tested"
+  else
+    assert_pass "${compared} row count(s) in the archive were checked against live data"
+  fi
+}
+
+# accept_stages_count_table <table> — rows in one stages table, or empty when
+# the table is not there. Separate from accept_stages_count because that one is
+# deliberately fixed on placements, and a table name reaching psql has to be
+# checked against the catalogue before it is interpolated.
+accept_stages_count_table() {
+  local table="$1" exists
+  # A table name is about to be interpolated into SQL, so it is checked against
+  # this pattern and then against the catalogue before it is used as an
+  # identifier. Nothing here takes a name from anywhere but the fingerprint
+  # file the backup wrote, but "the input happened to be trustworthy" is not
+  # the same as validating it.
+  [[ "$table" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || return 0
+
+  # Existence first, as its own query: asking for the count of a table that is
+  # not there and asking for the count of an empty table both answer "0" if
+  # the two questions are run together, and those are different answers.
+  exists="$(accept_stages_psql \
+    "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '${table}'")"
+  [[ "$exists" == 1 ]] || return 0
+
+  accept_stages_psql "SELECT count(*) FROM \"${table}\""
+}
+
+# accept_stages_psql <sql> — one query against the live stages database.
+accept_stages_psql() {
+  ( cd "${STAGES_DIR:?}" && lab_as_root docker compose exec -T "${DB_SERVICE:-db}" \
+      psql -tAq -U "${POSTGRES_USER:-stages_owner}" -d "${POSTGRES_DB:-stages}" \
+      -c "$1" ) 2>/dev/null | tr -d '[:space:]'
+}
+
 # accept_alert_cycle — one alert fires, and then recovers.
 #
 # Both halves are driven, not observed: the suite makes the backups look stale,
