@@ -77,6 +77,50 @@ doc_conf() {
     fi
   done
 
+  # Keys a later stage needs, which are empty until someone fills them in.
+  #
+  # A warning rather than a failure, because the lab works without them right
+  # up to the challenge that reads one — and that is the problem being solved
+  # here. An unset value surfaces as an assertion failing for a reason that
+  # has nothing to do with the fault you were sent to find, so the only useful
+  # place to hear about it is before you start. SETUP.md section 10 collects
+  # all of these in one pass.
+  doc_conf_later() {
+    local key="$1" who="$2" how="$3"
+    [[ -z "${!key:-}" ]] || { doc_ok "lab.conf: ${key} is set"; return 0; }
+    doc_warn "lab.conf: ${key} is empty — needed by ${who}" "$how"
+  }
+  doc_conf_later LAB_ADMIN_USER "the stage 8 acceptance suite" \
+    "id -un   # the account you built this machine with; it checks keys and sudo"
+  doc_conf_later EXPECTED_USERS "health_check and lab chaos --check" \
+    "awk -F: '\$3>=1000 && \$3<65534 {print \$1}' /etc/passwd | tr '\n' ' '"
+  doc_conf_later UPLOADS_PATH "s7-03 and s7-07" \
+    "docker volume inspect -f '{{.Mountpoint}}' ${STAGES_UPLOADS_VOLUME:-stages_uploads}"
+  doc_conf_later S8_RTO_MINUTES "s8-02" \
+    "the recovery time objective in minutes, from your s7-02 report"
+  doc_conf_later S8_RUNBOOK_DIR "s8-03" \
+    "the Git repository holding your own runbooks — not this one"
+
+  # EXPECTED_PORTS is never empty, which is exactly why it needs checking: the
+  # example ships a plausible list, and a list that came from the example
+  # asserts only that the example was right.
+  if [[ -n "${EXPECTED_PORTS:-}" ]]; then
+    listening="$(ss -ltnH 2>/dev/null | awk '{n=split($4,a,":"); print a[n]}' | sort -un | tr '\n' ' ')"
+    drift=""
+    for port in $listening; do
+      [[ " ${EXPECTED_PORTS} " != *" ${port} "* ]] && drift+="+${port} "
+    done
+    for port in ${EXPECTED_PORTS}; do
+      [[ " ${listening} " != *" ${port} "* ]] && drift+="-${port} "
+    done
+    if [[ -z "$drift" ]]; then
+      doc_ok "lab.conf: EXPECTED_PORTS matches what is listening"
+    else
+      doc_warn "lab.conf: EXPECTED_PORTS does not match what is listening (${drift})" \
+        "sudo ss -ltnp   # account for each difference, THEN capture: ss -ltnH | awk '{n=split(\$4,a,\":\"); print a[n]}' | sort -un | tr '\n' ' '"
+    fi
+  fi
+
   # Directories that must exist, because challenges cd into them.
   for key in STAGES_DIR LEAVES_DIR NURSE_DIR; do
     val="${!key:-}"
@@ -243,15 +287,30 @@ doc_tools() {
   local missing=() t
   for t in curl git make jq openssl python3 ss namei runuser sudo \
            losetup mkfs.ext4 findmnt mountpoint fuser lsof pgrep \
-           docker shellcheck psql crontab; do
+           docker shellcheck psql crontab \
+           ufw logrotate restic age; do
     have "$t" || missing+=("$t")
   done
   if (( ${#missing[@]} == 0 )); then
     doc_ok "every tool the challenges use is installed"
   else
     doc_fail "missing tools: ${missing[*]}" \
-      "sudo apt install -y psmisc lsof e2fsprogs util-linux cron jq shellcheck postgresql-client"
+      "sudo apt install -y psmisc lsof e2fsprogs util-linux cron jq shellcheck postgresql-client ufw logrotate restic age"
   fi
+
+  # Needed by one challenge each, and each fails misleadingly without its tool
+  # rather than saying what is missing: s4-05 reports an empty hardening
+  # baseline, and s4-02's resolution assertion loses its fallback. A warning,
+  # because the rest of the lab is unaffected.
+  for t in lynis dig; do
+    have "$t" && continue
+    case "$t" in
+      lynis) doc_warn "lynis is not installed — s4-05 cannot score anything" \
+               "sudo apt install -y lynis   # without it the check reports an empty baseline, not a missing package" ;;
+      dig)   doc_warn "dig is not installed — s4-02 loses its resolution fallback" \
+               "sudo apt install -y bind9-dnsutils" ;;
+    esac
+  done
   if have docker; then
     if doc_run docker info; then
       doc_ok "docker answers as $(id -un) without sudo"

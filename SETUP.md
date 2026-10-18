@@ -158,7 +158,16 @@ sudo ufw status verbose
 sudo apt install -y ca-certificates curl gnupg git make shellcheck jq \
                     nginx postgresql-16 python3-venv python3-pip \
                     openssl age restic \
-                    psmisc lsof e2fsprogs util-linux cron
+                    psmisc lsof e2fsprogs util-linux cron \
+                    ufw logrotate lynis bind9-dnsutils xz-utils zstd
+# That last line is the one most easily skipped and hardest to diagnose later.
+# ufw and logrotate usually ship with Ubuntu Server and are named anyway, so
+# the list is the whole truth rather than most of it. lynis is what s4-05
+# measures a hardening score with — without it that challenge fails reporting
+# an empty baseline, which says nothing about the missing package. bind9-dnsutils
+# provides dig, which s4-02 falls back to. xz-utils and zstd are only needed if
+# your s2-04 logrotate rule picks one of them over gzip.
+
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
   | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -368,6 +377,14 @@ docker compose exec -T db psql -U stages_app -d stages \
   -c "DELETE FROM audit_log" || echo "correct: DELETE refused"
 ```
 
+The uploads volume now exists, and its path on disk is one of the values
+`lab.conf` needs — `UPLOADS_PATH`, which s7-03 restores and s7-07 scrambles.
+Section 10 collects it, or take it now:
+
+```bash
+docker volume inspect -f '{{.Mountpoint}}' stages_uploads
+```
+
 **And prove it refuses to start when it should.** Three configuration mistakes,
 each of which must kill the container rather than be tolerated:
 
@@ -511,8 +528,11 @@ ls /opt/leaves/*/wsgi.py                        # the project package
 Everything is mounted under `/etoile-formation-conge/`, `admin/` and `login/`
 included, so a bare `/` returning 404 is correct and not a fault.
 
-`/var/log/leaves/access.log` is what s2-04 writes a logrotate rule for, so do
-not point it at the journal instead.
+`/var/log/leaves/access.log` — the `--access-logfile` in the unit above — is
+what s2-04 writes a logrotate rule for, and it is `LEAVES_LOG` in `lab.conf`.
+Do not point it at the journal instead: the journal cannot be rotated by
+logrotate and that challenge would have nothing to act on. Gunicorn reopens
+this file on `SIGUSR1`, which is the fact s2-04 turns on.
 
 ---
 
@@ -867,7 +887,117 @@ timed challenge.
 
 ---
 
-## 10. Verify, then take the `deployed` snapshot
+## 10. Finish `lab.conf`, before the snapshot
+
+Everything above built the machine. This section finishes the file that
+*describes* it, and it is not a formality: `lab.conf` is where every challenge
+reads its paths, ports and names from, and a variable you never set is a
+challenge that fails for a reason the failure message cannot explain. Do this
+before the `deployed` snapshot, so the snapshot carries a complete file.
+
+`lab.conf` is not tracked by Git — `.gitignore` excludes it — so it survives
+`git pull` and is yours to edit freely. Start from the example if you have not
+already:
+
+```bash
+cd ~/breakfix-lab
+[[ -f lab.conf ]] || cp lab.conf.example lab.conf
+```
+
+**The seven that are empty, and must not stay empty.** These are the first-run
+blockers. Six of them you can fill in now; two belong to Stage 8 and are listed
+here so you know they exist before you reach them.
+
+```bash
+# 1. LAB_ADMIN_USER — the account you are logged in as. The stage 8 acceptance
+#    suite checks that it exists, has keys, and can escalate.
+id -un
+
+# 2. EXPECTED_USERS — every human account on the machine, right now, while you
+#    still know why each one is there. health_check fails on any account not
+#    in this list, which is the point: it is how you notice a new one.
+awk -F: '$3>=1000 && $3<65534 {print $1}' /etc/passwd | tr '\n' ' '
+
+# 3. UPLOADS_PATH — where the stages uploads volume actually lives on disk.
+#    s7-07 scrambles this directory and s7-03 restores it.
+docker volume inspect -f '{{.Mountpoint}}' stages_uploads
+
+# 4. LAB_LAN_IP — from section 4, if you have not already.
+ip -4 -o addr show scope global | awk '{print $4}'
+```
+
+`NURSE_WEB_UNIT` is the fifth, and it is **deliberately empty**: `nurse`'s
+frontend is static files served by the host nginx, so there is no unit to name.
+Leave it empty unless s6-07 containerises that app, which is the one thing that
+changes the answer.
+
+`S8_RTO_MINUTES` and `S8_RUNBOOK_DIR` are the last two. The first is your
+recovery time objective in minutes, which s7-02 asks you to write down *before*
+you know what it really is, and s8-02 then holds you to. The second is the Git
+repository holding your own runbooks, which s8-03 measures what you had to add
+to. Neither is needed until those challenges, and both fail loudly rather than
+silently when they are missing.
+
+**Then capture the port list from the machine, not from the example.**
+`EXPECTED_PORTS` ships with a plausible default and a plausible default is
+exactly the wrong thing here: the whole value of the assertion is that the list
+came from a machine you were willing to defend. Capture it now, while the
+machine is in that state:
+
+```bash
+ss -ltnH | awk '{n=split($4,a,":"); print a[n]}' | sort -un | tr '\n' ' '
+```
+
+On a lab VM built from this file that should be `22 80 443 3000 5432 8000 8080
+8081`. If yours differs, yours is right and the example is wrong — but find out
+*why* it differs before you paste it. `sudo ss -ltnp` names the process behind
+each port, and a port you cannot account for is the most interesting thing on
+the machine.
+
+**And confirm these three match what section 5 actually created**, because they
+name the database the restore checks read from:
+
+```bash
+grep -E '^(POSTGRES_USER|POSTGRES_DB|STAGES_DRILL_DB)=' lab.conf
+# POSTGRES_USER="stages_owner"   the owner role from section 5
+# POSTGRES_DB="stages"           the live database
+# STAGES_DRILL_DB="stages_drill" the throwaway one s7-02 restores into
+```
+
+**Everything else can stay as it ships.** That is most of the file, and it is
+worth saying explicitly so you do not go looking for work:
+
+| Group | Why no action is needed |
+| --- | --- |
+| `S2_*` | `S2_BIN_DIR` is `/usr/local/bin`, which exists; `S2_01_DIR` is created by that challenge; the logrotate paths are what you will create in s2-04 |
+| `S4_*`, `S5_*`, `S9_*` | tuning numbers for individual challenges — sizes, ports, thresholds. Change them only if a challenge tells you to, or if your VM is small |
+| `BACKUP_*` | paths and unit names that Stage 7 *creates*. They do not exist yet and `health_check` reports that rather than failing on it |
+| `HEALTH_*` | what "healthy" means, shared by `lab chaos --check` and the Stage 8 suite. Defaults are sane for a 2 vCPU VM |
+| `LAB_SCRATCH_*` | bounded loopback filesystems, created on demand by `lib/fs.sh` |
+| `ASSERT_TIMEOUT` | the per-assertion deadline. Raise it only if a slow VM makes checks time out |
+
+**Verify the file is complete before you snapshot.** `lab doctor` checks every
+value in this section and names the challenge each one belongs to:
+
+```bash
+lab doctor
+```
+
+The six above appear as `WARN` rather than `FAIL`, because the lab works
+without them right up to the challenge that reads one — and that is the whole
+problem. An unset value does not announce itself; it surfaces as an assertion
+failing for a reason that has nothing to do with the fault you were sent to
+find. `lab doctor` also compares `EXPECTED_PORTS` against what is actually
+listening and reports the difference in both directions, which is the one check
+here that stays useful long after setup.
+
+Clear the warnings now. A warning you have read and decided about is finished;
+one you have not is a question waiting to be asked at the worst possible
+moment.
+
+---
+
+## 11. Verify, then take the `deployed` snapshot
 
 ```bash
 curl -fsS http://127.0.0.1:8080/api/health/                                   # stages api
@@ -891,13 +1021,16 @@ Shut down and snapshot as **`deployed`**.
 
 `deployed` means: everything in `clean`, plus all three applications running and
 seeded — `stages` in containers, `leaves` and `nurse` under systemd — the host
-nginx in front of them, TLS in place, and `lab.conf` filled in with your real
-`LAB_LAN_IP`. This is the snapshot almost every challenge expects,
-and the one you roll back to after an irreversible break.
+nginx in front of them, TLS in place, and **`lab.conf` complete** as of section
+10, with the port and user lists captured from this machine rather than copied
+from the example. This is the snapshot almost every challenge expects, and the
+one you roll back to after an irreversible break — which is why the complete
+`lab.conf` belongs inside it: rolling back to a snapshot whose `lab.conf` was
+half-filled means rediscovering the same six blanks every time.
 
 ---
 
-## 11. Which snapshot each challenge expects
+## 12. Which snapshot each challenge expects
 
 | Challenges | Snapshot | Notes |
 | --- | --- | --- |

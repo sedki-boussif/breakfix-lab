@@ -159,8 +159,9 @@ FSTAB="/etc/fstab"                           # s5-07: named so nothing hard-code
 # --- what "healthy" means ---------------------------------------------------
 # health_check in lib/assert.sh reads these, and both `lab chaos --check` and
 # the stage 8 acceptance suite call health_check, so this is the single place
-# the definition lives. Capture the port and user lists after SETUP.md section
-# 10, when the machine is in the state you want to defend.
+# the definition lives. SETUP.md section 10 captures the port and user lists
+# from the machine itself, which is the only version of these two worth having:
+# a list copied from this example asserts that the example was right.
 HEALTH_DISK_PCT="80"
 HEALTH_INODE_PCT="80"
 HEALTH_MEM_MIN_MB="256"
