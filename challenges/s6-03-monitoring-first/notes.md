@@ -72,10 +72,26 @@ are different bugs with different fixes.
 three rules with state-change semantics, the applications were small HTTP
 servers, and `systemctl` was a shim — but the certificate swap, the
 `openssl req -days 7` generation, the date arithmetic and the alert-log
-matching were all real. Verified: a working monitor passes everything the
-environment allows, a constantly-alerting one fails the control, a monitor with
-no certificate rule fails that alert and the real certificate comes back
-afterwards, and a vague alert fails on not naming its condition.
+matching were all real.
+
+Verified: a working monitor passes everything the environment allows — the
+service alert firing and clearing, the certificate alert firing and clearing,
+the certificate swapped and put back, and all three applications still
+answering at the end. And a constantly-alerting monitor fails the quiet
+control, with the message explaining that it invalidates the assertions below
+rather than merely being noisy.
+
+Two cases were set up and not carried to completion, and are recorded here
+rather than claimed: a monitor with no certificate rule (which should fail that
+alert and still get its certificate back), and an alert that fires without
+naming its condition (which should fail on the pattern rather than on the log
+not growing). Each run needs about eleven minutes because every alert window
+runs to its timeout when nothing matches, and the output is block-buffered
+inside the container until it exits, so neither could be observed within the
+session. The restore path is exercised by the passing run — the certificate is
+swapped and restored there — but the restore specifically after a *failed*
+certificate assertion has not been seen to run. It is the first thing to check
+on the VM.
 
 The disk assertion could not be exercised, because this Docker host has no loop
 devices and `lab_fs_require` cannot make a bounded filesystem. The check
