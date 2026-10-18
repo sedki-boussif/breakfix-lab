@@ -12,12 +12,13 @@ SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 SCRIPTS := bin/lab $(wildcard lib/*.sh) $(wildcard challenges/*/*.sh)
 
-.PHONY: help lint selftest test guard-test
+.PHONY: help lint selftest test guard-test scan-secrets
 
 help:
 > @echo "make lint       shellcheck every script in the repo"
 > echo "make selftest   every challenge complete, well-formed, and how it was verified"
 > echo "make guard-test every break.sh refuses with no lab marker (run with it absent)"
+> echo "make scan-secrets  nothing in the repo that should not be published"
 > echo "make test       break, prove the check fails, reset, prove it passes"
 > echo "                (needs /etc/breakfix-lab and LAB_DISPOSABLE=1)"
 
@@ -102,6 +103,33 @@ guard-test:
 > done
 > echo "guard-test: $$n break scripts tested, $$((n-bad)) refused with 97 and changed nothing"
 > (( bad == 0 ))
+
+scan-secrets:
+> @echo "scanning for anything that should not be in a published repository..."
+> found=0
+> EX="--exclude-dir=.git --exclude=BUILD-INSTRUCTIONS.md"
+> # Addresses: only loopback, 0.0.0.0 and the reserved documentation ranges of
+> # RFC 5737 and RFC 3849 are allowed. Nothing wider, deliberately.
+> hits="$$(grep -rInE '(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$$)' $$EX . | grep -vE '(^|[^0-9])127\.[0-9]+\.[0-9]+\.[0-9]+|0\.0\.0\.0|255\.255|192\.0\.2\.|198\.51\.100\.|203\.0\.113\.' || true)"
+> [[ -z "$$hits" ]] || { echo "  IP addresses outside the documentation ranges:"; sed 's/^/    /' <<<"$$hits"; found=1; }
+> hits="$$(grep -rInE '2001:[0-9a-fA-F]{1,4}:' --exclude-dir=.git . | grep -vE '2001:db8' || true)"
+> [[ -z "$$hits" ]] || { echo "  IPv6 outside 2001:db8::/32:"; sed 's/^/    /' <<<"$$hits"; found=1; }
+> # Assigned secrets: a placeholder or a generated value is fine, a literal is not.
+> hits="$$(grep -rInE '(SECRET|PASSWORD|PASSWD|TOKEN|API[_-]?KEY)[A-Za-z_]*[=:][[:space:]]*.?[A-Za-z0-9+/._-]{12,}' $$EX . | grep -vE 'NOPASSWD|change-me|generate-me|openssl rand|secrets\.token|\$$\(|\$$\{|<|placeholder|example|insecure-abc|token_urlsafe' || true)"
+> [[ -z "$$hits" ]] || { echo "  assigned secrets:"; sed 's/^/    /' <<<"$$hits"; found=1; }
+> # Keys and certificates in any form.
+> hits="$$(grep -rIl --exclude-dir=.git --exclude=Makefile -e '-----BEGIN [A-Z]' . || true)"
+> [[ -z "$$hits" ]] || { echo "  PEM blocks:"; sed 's/^/    /' <<<"$$hits"; found=1; }
+> # Hostnames: everything the lab invents is .invalid or .localhost. The
+> # allowlist is the package repos and documentation links the files legitimately
+> # reference, and nothing else.
+> hits="$$(grep -rhoIE '\b[a-z0-9][a-z0-9.-]*\.(com|net|org|io|tn|fr|co|dev|app|uk|de)\b' $$EX . | sort -u | grep -vxE 'download\.docker\.com|deb\.debian\.org|github\.com|claude\.com|anthropic\.com|shellcheck\.net|www\.shellcheck\.net|containerd\.io|issue\.net|wsgi\.application|config\.wsgi' || true)"
+> [[ -z "$$hits" ]] || { echo "  hostnames that are not allowlisted:"; sed 's/^/    /' <<<"$$hits"; found=1; }
+> # Files that must never be committed, in case .gitignore drifts.
+> hits="$$(git ls-files 2>/dev/null | grep -E '(^|/)(lab\.conf|\.env)$$|\.(key|pem|dump|tar\.age)$$' || true)"
+> [[ -z "$$hits" ]] || { echo "  tracked files that should be ignored:"; sed 's/^/    /' <<<"$$hits"; found=1; }
+> (( found == 0 )) || { echo "scan-secrets: FAILED"; exit 1; }
+> echo "scan-secrets: clean - no real addresses, hostnames, keys or assigned secrets"
 
 test:
 > @[[ -f /etc/breakfix-lab ]] || {

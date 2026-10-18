@@ -1,0 +1,7 @@
+Identify the disk before you touch it: `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT`. The one you want has no FSTYPE and no MOUNTPOINT. Writing to the wrong disk here is not recoverable by anything in this lab.
+The LVM stack is three commands and they build on each other: `pvcreate /dev/sdX`, `vgcreate dockervg /dev/sdX`, `lvcreate -l 60%VG -n dockerlv dockervg`. Check each with `pvs`, `vgs`, `lvs` before the next one.
+Stop Docker before copying, and stop it properly — `systemctl stop docker docker.socket` — or you are copying a directory that is being written to. Containers will stop; that is expected and is why the applications come back when Docker does.
+Copy with something that preserves hard links, xattrs and numeric ownership: `rsync -aHAX --numeric-ids /var/lib/docker/ /mnt/new/`. Docker's overlay2 store is full of hard links, and a copy that flattens them wastes gigabytes and can break image layers.
+Get the UUID from `blkid` and paste it — never retype it. `UUID=... /var/lib/docker ext4 defaults 0 2`, then `mount -a` and confirm it returns silently before you trust a reboot.
+Verify before deleting the old copy: Docker up, `docker images` listing what it did before, the three apps answering. Then remove the old directory, which is also how you discover whether anything was still using it.
+For the live extend: `lvextend -l +100%FREE /dev/dockervg/dockerlv` then `resize2fs /dev/dockervg/dockerlv`. ext4 grows mounted — that is the whole reason this is worth doing — and `df -h` before and after is the evidence for the report.

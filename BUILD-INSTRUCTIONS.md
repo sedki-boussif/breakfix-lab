@@ -793,7 +793,21 @@ Before telling me it is done, run these and show me the output:
 
 These three live as `Makefile` targets — `make selftest`, `make guard-test` and
 `make scan-secrets` — rather than as scripts in their own directory, so the tree
-in §3 stays as specified. `make lint` runs `shellcheck -x -P <repo root>` so that
+in §3 stays as specified.
+
+`make scan-secrets` checks six things: IP addresses outside loopback and the
+RFC 5737 / RFC 3849 documentation ranges, IPv6 outside `2001:db8::/32`, assigned
+secrets (a placeholder or a generated value passes, a literal does not), PEM
+blocks, hostnames outside a small allowlist, and tracked files that `.gitignore`
+should have excluded in case it drifts. The allowlist is only the package repos
+and documentation links the files legitimately reference —
+`download.docker.com` is there because installing Docker requires its
+repository. It was tuned against five false positives it found on its first run
+(systemd-resolved's `127.0.0.53` stub, `NOPASSWD` in a sudoers line, the
+`containerd.io` package name, `/etc/issue.net`, and its own pattern matching
+itself in the Makefile), because a scanner that cries wolf is a scanner nobody
+runs. Verified to still catch a planted `DB_PASSWORD=` and a planted public
+nameserver address. `make lint` runs `shellcheck -x -P <repo root>` so that
 sourced libraries are followed. `make test` (break, prove the check fails, reset,
 prove it passes) refuses to run unless `/etc/breakfix-lab` exists **and**
 `LAB_DISPOSABLE=1` is set, so it cannot be aimed at a VM that matters, and it

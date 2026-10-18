@@ -1,0 +1,9 @@
+STAGE=6
+TYPE=mission
+TITLE="Give Docker its own volume"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

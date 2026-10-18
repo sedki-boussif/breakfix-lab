@@ -429,6 +429,7 @@ lab next                        # what am I ready for?
 bash -x challenges/<id>/check.sh 2>&1 | tail -40     # what did the check actually do?
 cat challenges/<id>/notes.md    # what is the fault, and what is the trap?
 make lint && make selftest      # did I break the repo?
+make scan-secrets               # is anything in it that should not be published?
 ```
 
 And the one habit: **`lab report <id>` while it is fresh.** The dead ends are the
