@@ -206,6 +206,28 @@ POSTGRES_DB="stages"                           # the live stages database
 # What the ransomware drill scrambles and the restore has to bring back.
 UPLOADS_PATH=""                                # from: docker volume inspect -f '{{.Mountpoint}}' stages_uploads
 
+# --- containers and deployment (stage 6) -----------------------------------
+# s6-02 and s6-07 move leaves and nurse from gunicorn-under-systemd into
+# compose projects. When you pass one, flip that app's *_MODE above to
+# "compose" — lib/svc.sh reads it, and every other challenge that touches the
+# app then goes through the compose path instead of systemctl.
+#
+# The databases these two apps use on the host, which the compose stacks take
+# over. Needed by the checks to dump, restore and count.
+LEAVES_DB_NAME="leaves"
+LEAVES_DB_ROLE="leaves_app"
+NURSE_DB_NAME="nurse"
+NURSE_DB_ROLE="nurse_app"
+# A table in each whose row count is worth comparing across a rebuild. Django
+# names tables <app_label>_<modelname>, lowercased.
+LEAVES_COUNT_TABLE="leave_management_leaverequest"
+NURSE_COUNT_TABLE="theses_thesis"
+# s6-06: where the deploy script and the tag record live. The challenge is
+# about naming a tag and getting exactly that tag, so the record of what is
+# deployed has to live outside the checkout.
+S6_06_DEPLOY_STATE="/var/lib/breakfix-lab/deployed-tags"
+S6_06_APP="leaves"                             # the app the tag drill runs against
+
 # --- the three rebuilds (stage 8) -------------------------------------------
 # The acceptance suite in lib/accept.sh reads these. It is the same suite for
 # all three, so anything set here is a standard the machine is held to however

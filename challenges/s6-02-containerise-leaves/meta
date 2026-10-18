@@ -1,0 +1,9 @@
+STAGE=6
+TYPE=mission
+TITLE="Containerise the leave app"
+LEVEL=3
+APPS=leaves
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-compose
