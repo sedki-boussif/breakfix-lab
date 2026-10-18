@@ -1,0 +1,9 @@
+STAGE=2
+TYPE=mission
+TITLE="Rotate the app logs"
+LEVEL=2
+APPS=leaves
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-process

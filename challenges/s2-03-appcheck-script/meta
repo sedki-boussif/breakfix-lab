@@ -1,0 +1,9 @@
+STAGE=2
+TYPE=mission
+TITLE="Write appcheck.sh"
+LEVEL=2
+APPS="stages leaves nurse"
+NEEDS=s2-02-sysinfo-script
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-systemd
