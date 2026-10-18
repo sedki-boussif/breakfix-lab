@@ -35,7 +35,7 @@ compose_q() {
 # names the fix, because "compose.yaml is wrong" is not a diagnosis.
 compose_shape_assertions() {
   local dir="$1" project="$2" db_svc="$3" app_svc="$4" port="$5"
-  local json name vols mount missing dep published host_ip raw
+  local json name vols mount missing dep raw cand
 
   # Every filter below is a jq filter, and jq missing would otherwise abort the
   # check at the first one with "command not found" and no verdict — the same
@@ -101,20 +101,7 @@ compose_shape_assertions() {
     '.services[$a].depends_on[$d].condition // empty' <<<"$json")"
   assert_equal "${app_svc} waits for ${db_svc} to be healthy" "$dep" "service_healthy"
 
-  # Published on loopback, on the port the host nginx already proxies to.
-  published="$(jq -r --arg a "$app_svc" --arg p "$port" \
-    '.services[$a].ports // [] | map(select((.published|tostring) == $p)) | .[0] // empty | .published|tostring' <<<"$json")"
-  host_ip="$(jq -r --arg a "$app_svc" --arg p "$port" \
-    '.services[$a].ports // [] | map(select((.published|tostring) == $p)) | .[0] // empty | .host_ip // ""' <<<"$json")"
-  if [[ -z "$published" ]]; then
-    assert_fail "${app_svc} publishes ${port}, the port it always used" \
-      "the host nginx proxies to 127.0.0.1:${port} and was not supposed to need changing. Published instead: $(jq -r --arg a "$app_svc" '.services[$a].ports // [] | map(.published|tostring) | join(", ")' <<<"$json")"
-  elif [[ "$host_ip" == "127.0.0.1" ]]; then
-    assert_pass "${app_svc} publishes 127.0.0.1:${port} only"
-  else
-    assert_fail "${app_svc} publishes on loopback only" \
-      "it publishes ${port} on '${host_ip:-0.0.0.0}', which reaches the network past ufw — Docker writes its own iptables rules, and that is s4-04"
-  fi
+  compose_publishes_loopback "$dir" "$app_svc" "$port"
 
   # Secrets: read from the RAW file. `config` resolves variables, so a password
   # that came from the env file is present in the JSON either way.
@@ -147,6 +134,32 @@ compose_shape_assertions() {
       assert_fail "no password is written into the compose file" \
         "$(sed -n 1p <<<"$leaked" | cut -c1-70) — compose.yaml is the file that gets committed"
     fi
+  fi
+}
+
+# compose_publishes_loopback <dir> <service> <port>
+#
+# The port the host nginx already proxies to, published on loopback only.
+# Separate from compose_shape_assertions because nurse has two of them — an
+# API and a frontend — and the second one needs the same assertion without a
+# second copy of it.
+compose_publishes_loopback() {
+  local dir="$1" svc="$2" port="$3" json published host_ip
+  json="$(compose_json "$dir")"
+  [[ -n "$json" ]] || return 0
+
+  published="$(jq -r --arg a "$svc" --arg p "$port" \
+    '.services[$a].ports // [] | map(select((.published|tostring) == $p)) | .[0] // empty | .published|tostring' <<<"$json")"
+  host_ip="$(jq -r --arg a "$svc" --arg p "$port" \
+    '.services[$a].ports // [] | map(select((.published|tostring) == $p)) | .[0] // empty | .host_ip // ""' <<<"$json")"
+  if [[ -z "$published" ]]; then
+    assert_fail "${svc} publishes ${port}, the port it always used" \
+      "the host nginx proxies to 127.0.0.1:${port} and was not supposed to need changing. Published instead: $(jq -r --arg a "$svc" '.services[$a].ports // [] | map(.published|tostring) | join(", ")' <<<"$json")"
+  elif [[ "$host_ip" == "127.0.0.1" ]]; then
+    assert_pass "${svc} publishes 127.0.0.1:${port} only"
+  else
+    assert_fail "${svc} publishes on loopback only" \
+      "it publishes ${port} on '${host_ip:-0.0.0.0}', which reaches the network past ufw — Docker writes its own iptables rules, and that is s4-04"
   fi
 }
 

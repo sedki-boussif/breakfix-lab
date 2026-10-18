@@ -1,0 +1,9 @@
+STAGE=6
+TYPE=mission
+TITLE="Containerise the theses app"
+LEVEL=3
+APPS=nurse
+NEEDS=s6-02-containerise-leaves
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-compose
