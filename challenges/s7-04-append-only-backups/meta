@@ -1,0 +1,9 @@
+STAGE=7
+TYPE=mission
+TITLE="Backups an attacker cannot delete"
+LEVEL=4
+APPS=system
+NEEDS=s7-01-backups-worth-having
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

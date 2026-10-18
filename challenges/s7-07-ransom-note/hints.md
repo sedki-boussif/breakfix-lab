@@ -1,0 +1,6 @@
+Before anything else: establish scope. What is actually damaged, and what merely looks damaged? Check the database (`SELECT count(*)` on the tables), the applications, and the uploads path separately. Panic generalises; evidence does not.
+The note says the backups were removed. Check whether that is true of all of them — `ls` the local repository, then the off-site one. The whole point of s7-01's off-site copy is this moment.
+Before restoring, preserve what is there. Copy the scrambled files and the note somewhere else first: they are the only evidence of what happened, and they cost nothing to keep.
+`restic snapshots` against the off-site repository, then restore the uploads path from the newest snapshot. Restore to a staging directory first, check it looks right, then put it in place — a restore straight over a damaged directory can leave you with a mixture of both.
+When the files are back, deal with what did it. Something ran, and something may still be running: `ps`, `ss -ltnp`, `systemctl list-timers`, and the cron directories. This challenge does not plant persistence, but you should establish that rather than assume it.
+The note says do not restart the server. That is the one piece of advice in it worth examining: it is there because a restart drops whatever is running in memory. Decide for yourself, and say in the report what you decided and why.

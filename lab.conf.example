@@ -153,8 +153,32 @@ EXPECTED_PORTS="22 80 443 3000 5432 8000 8080 8081"
 EXPECTED_USERS=""
 # Written by the backup timer in s7-01. Absent until then, which health_check
 # reports rather than failing on.
-BACKUP_MARKER=""
+BACKUP_MARKER="/var/backups/lab/last-success"
 BACKUP_MAX_AGE_H="30"
+
+# --- backups (stage 7) ------------------------------------------------------
+# "Off-VM" is simulated locally throughout: a separate filesystem, a second
+# container, or a second VM — never a real cloud account. The pattern is what
+# is being learned, not the vendor. BACKUP_REMOTE is the off-site copy; keeping
+# it on its own filesystem means a full local disk cannot take it with it.
+BACKUP_TOOL="restic"
+BACKUP_REPO="/var/backups/lab/repo"            # the local repository
+BACKUP_REMOTE_MNT="/srv/lab-offsite"           # its own filesystem
+BACKUP_REMOTE="/srv/lab-offsite/repo"          # the off-VM copy
+BACKUP_REMOTE_MB="1024"                        # size of that filesystem
+BACKUP_PASSWORD_FILE="/etc/lab-backup/password"
+BACKUP_TIMER="lab-backup.timer"
+BACKUP_SERVICE="lab-backup.service"
+BACKUP_RETENTION_DAILY="7"
+# Where whatever checks the backups writes its alerts. The check for s7-01 and
+# s7-05 asserts a NEW line appears here, so it must be a file that is appended
+# to, not a journal unit.
+BACKUP_ALERT_LOG="/var/log/lab-backup-alerts.log"
+# The restore fingerprint: row counts taken at backup time, compared after a
+# restore. A restore that returns the wrong data silently is the failure mode.
+BACKUP_FINGERPRINT="/var/backups/lab/row-counts.txt"
+# What the ransomware drill scrambles and the restore has to bring back.
+UPLOADS_PATH=""                                # from: docker volume inspect -f '{{.Mountpoint}}' stages_uploads
 
 # TLS, recorded in section 8 of SETUP.md so s4-03 knows what to swap out.
 TLS_CERT="/etc/nginx/tls/lab.crt"

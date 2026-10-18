@@ -1,0 +1,9 @@
+STAGE=7
+TYPE=incident
+TITLE="Someone was in here"
+LEVEL=5
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

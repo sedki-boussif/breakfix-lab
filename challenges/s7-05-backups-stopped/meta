@@ -1,0 +1,9 @@
+STAGE=7
+TYPE=incident
+TITLE="Backups stopped three weeks ago"
+LEVEL=3
+APPS=system
+NEEDS=s7-01-backups-worth-having
+SNAPSHOT=deployed
+RISK=
+PROVEN=mock-systemd

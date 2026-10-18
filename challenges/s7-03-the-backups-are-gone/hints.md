@@ -1,0 +1,6 @@
+Stop and take stock before restoring anything. You have an empty database, a missing local repository, and a damaged off-site one — and the order you deal with them in determines how much data you get back.
+`restic snapshots` against the off-site repository lists everything it still has, newest first. The newest being corrupt does not make the older ones corrupt; find the newest one that is actually readable.
+`restic check --read-data-subset=5% <repo>` tests whether a repository's data is retrievable rather than just indexed. Run it on the candidate snapshot's repository before you trust it, not after.
+Restore from the newest **good** snapshot, into a throwaway database first, and compare its row counts against the fingerprint for that snapshot — not the latest fingerprint, the one belonging to the snapshot you restored.
+Only then load it into the live database. Restoring straight over live data you have not yet verified is how a bad day becomes a worse one.
+The number the report has to state is the data loss window you actually achieved: the time between the snapshot you restored and when the data was lost. Compare it with the recovery point objective you wrote down in s7-02. That gap is the finding, not the restore.

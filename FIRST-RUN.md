@@ -362,5 +362,12 @@ so look hardest at them:
    container recreate. It is cheap to try if you have ten minutes spare after the
    three above: `lab start s3-02-theses-api-down`, fix the port in
    `/etc/nurse/nurse.env`, `lab check`. Not required this session.
-9. **The `clean` snapshot's `lab.conf`** is the unedited copy — `LAB_LAN_IP` is
+9. **Stage 7 is seven challenges and six of them are unproven.** They need a
+   real restic repository, a real timer and a real second filesystem, none of
+   which a container can honestly provide. Do them **in order** — s7-01 builds
+   what s7-02, s7-03, s7-04, s7-05 and s7-07 all depend on, and `NEEDS` in each
+   `meta` enforces that. s7-06 is `PROVEN=real`: it was verified with real cron,
+   real accounts and real keys, including that its key detector does not match
+   your own ed25519 key.
+10. **The `clean` snapshot's `lab.conf`** is the unedited copy — `LAB_LAN_IP` is
    empty in it. If you roll back to `clean`, redo §4 before §5.

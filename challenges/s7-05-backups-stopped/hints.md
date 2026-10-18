@@ -1,0 +1,6 @@
+Two questions, and they have different answers: is the backup failing, or is it not running at all? `systemctl list-timers --all` shows every timer with when it last ran and when it runs next, and it answers that in one line.
+The timer is not active. So nothing has failed — nothing has been attempted. That also explains the silent alert log, and the silence is the second fault.
+`systemctl status <timer>` and `journalctl -u <service> -S '30 days ago'` tell you when it last ran and whether anything was wrong when it did. Compare that date with the newest snapshot.
+Now the harder half: the dead-man's-switch did not fire. Look at the success marker's timestamp, and at whatever checks it. A marker with a recent date on a machine that has not backed up in three weeks is a marker that was written by something other than a successful backup.
+Fix both: enable and start the timer so backups resume, and make the monitoring tell the truth — a check that reads a marker someone can touch by hand is not monitoring. Then prove it: the alert log must get a line when the marker is stale.
+The report has to explain the gap: three weeks with no backup and no alert. What should have caught it on day one, and why did it not?

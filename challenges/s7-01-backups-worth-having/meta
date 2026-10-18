@@ -1,0 +1,9 @@
+STAGE=7
+TYPE=mission
+TITLE="Backups worth having"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

@@ -1,0 +1,9 @@
+STAGE=7
+TYPE=incident
+TITLE="Files are encrypted and the server is asking for money"
+LEVEL=5
+APPS=stages
+NEEDS=s7-01-backups-worth-having
+SNAPSHOT=deployed
+RISK=irreversible
+PROVEN=unproven

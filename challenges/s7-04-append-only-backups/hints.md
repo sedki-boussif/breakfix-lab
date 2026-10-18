@@ -1,0 +1,6 @@
+The question to answer first is "who is allowed to delete", and the answer must not be "the same identity that writes". Everything else follows from that.
+Three mechanisms work on a single Linux machine, and all three are honest versions of the real thing: file attributes (`chattr +a` or `+i`), a separate user who owns the destination with the backup user only able to add, or restic's own REST server run with `--append-only`.
+The simplest to reason about: make the destination owned by a different user, and give the backup process write-but-not-delete access. On a directory, delete permission comes from write permission on the DIRECTORY, not the file — so the sticky bit and ownership are what you are manipulating. `man 1 chmod`, the section on the restricted deletion flag.
+`chattr +i` on existing pack files makes them immutable even to root — which is a strong demonstration and will also stop restic rewriting its index. Try it, see what breaks, and decide whether that is the mechanism you want.
+Whatever you choose, test item 2 as root: `sudo rm` an old pack file and watch it fail. If it succeeds, you have made a backup that feels safer and is not.
+Then test item 3: run the backup again. If append-only broke the backup, you have swapped one failure for another — note what you had to change to make both work.

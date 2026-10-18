@@ -1,0 +1,6 @@
+Start with identity and access, because that is what persists. `getent passwd`, `awk -F: '$3>=1000' /etc/passwd`, and `lastlog` — you are looking for an account you did not create, and specifically one with a login shell.
+Then the keys. `sudo cat /home/*/.ssh/authorized_keys /root/.ssh/authorized_keys` and compare every entry against the keys you know you own. A key you cannot name is a key you did not put there.
+Then what is listening. `sudo ss -ltnp` and compare against what you expect — `EXPECTED_PORTS` in lab.conf is that list. Check what the process really is rather than what it calls itself: `ls -l /proc/<pid>/exe`.
+Then persistence, which is the part people miss. Something has to survive you cleaning up: `sudo crontab -l -u <each user>`, `ls -la /etc/cron.*  /etc/cron.d/`, `systemctl list-timers --all`, and `systemctl list-unit-files --state=enabled`. Removing a key that a cron job re-adds every ten minutes is not removal.
+There are four separate things to find and they reinforce each other. If you have found three and the fourth has not turned up, the one most likely missing is whatever re-creates the others — remove it first, then the rest, then check they stay removed.
+Wait ten minutes after cleaning up and look again. Anything that comes back was not removed, and the check does exactly this.

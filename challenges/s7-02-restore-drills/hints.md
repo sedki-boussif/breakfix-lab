@@ -1,0 +1,6 @@
+Read the fingerprint first — `BACKUP_FINGERPRINT` in lab.conf — and note which snapshot it belongs to. Comparing a restore against the live database proves nothing, because the live database has moved on since the backup.
+`restic restore <snapshot> --target <dir>` writes into a directory of your choosing, so a file-level restore never has to go near the live path. `restic restore latest --target /tmp/drill --include <path>` for a single file.
+For the database: restore the dump file, then load it into a NEW database (`createdb stages_drill`) and count rows there. Loading a dump over the live database to see whether it works is not a drill, it is an outage.
+Time each drill properly: `time` around the whole operation, or record `date -Is` before and after. What you are measuring is wall clock from "I need this" to "it is back", which includes finding the snapshot, not just the transfer.
+For the whole-system drill, the honest version needs a machine that has never seen this data: a second VM, or a container with nothing but the repository and the password. Restoring onto the machine that made the backup proves the archive is readable, not that you could rebuild.
+Record the times even when they are embarrassing. A restore that takes four hours is a fact you need; a restore you never timed is a number you will invent under pressure.
