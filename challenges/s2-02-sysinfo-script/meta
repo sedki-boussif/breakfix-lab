@@ -1,0 +1,9 @@
+STAGE=2
+TYPE=mission
+TITLE="Write sysinfo.sh"
+LEVEL=1
+APPS=system
+NEEDS=
+SNAPSHOT=clean
+RISK=
+PROVEN=real

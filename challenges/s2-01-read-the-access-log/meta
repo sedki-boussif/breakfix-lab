@@ -1,0 +1,9 @@
+STAGE=2
+TYPE=mission
+TITLE="Read the access log"
+LEVEL=1
+APPS=nurse
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

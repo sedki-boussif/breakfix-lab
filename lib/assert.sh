@@ -87,6 +87,12 @@ assert_summary() {
 }
 
 # assert_cmd <description> <command...>  — passes when the command exits 0.
+#
+# Note for callers passing a shell FUNCTION rather than a command: these locals
+# shadow any global of the same name for the duration of the call, and under
+# `set -u` a callback that reads one of them aborts with "unbound variable"
+# before it runs. Name variables a callback needs something other than `desc`,
+# `out` or `status`. Found the hard way in s2-02, whose check had an `$out`.
 assert_cmd() {
   local desc="$1"; shift
   local out status=0
