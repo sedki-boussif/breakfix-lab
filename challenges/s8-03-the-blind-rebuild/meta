@@ -1,0 +1,9 @@
+STAGE=8
+TYPE=mission
+TITLE="The blind rebuild"
+LEVEL=5
+APPS="stages leaves nurse"
+NEEDS="s8-01-build-from-nothing"
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven
