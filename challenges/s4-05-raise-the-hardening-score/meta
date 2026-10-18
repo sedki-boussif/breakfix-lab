@@ -1,0 +1,9 @@
+STAGE=4
+TYPE=mission
+TITLE="Raise the hardening score"
+LEVEL=2
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

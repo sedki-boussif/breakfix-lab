@@ -1,0 +1,6 @@
+Do part one before reading any further. The demonstration is the entire value: a denied port that answers from another machine is a fact you will not forget, and reading about it is not the same.
+`sudo iptables -L -n -v | less` and look at the order. ufw's rules live in chains called `ufw-input`; Docker's live in `DOCKER` and `DOCKER-USER`, reached from `FORWARD`. Published container traffic is forwarded, not input — so it never passes through the chain ufw is managing.
+`sudo iptables -t nat -L DOCKER -n` shows the DNAT rules that publish the ports. That is what `ports:` in a compose file compiles into.
+The loopback fix is a one-word change — `127.0.0.1:` in front of the host port — and it is the right default because it removes the exposure rather than filtering it. Everything else in this lab is already published that way; look at the stand-in's compose file.
+The DOCKER-USER fix matters when you genuinely need a port published on the LAN and filtered. Rules there are evaluated before Docker's own, and Docker does not flush them, which is why it exists.
+Make the rule survive a reboot: an `iptables -I` by hand is gone on restart. `ufw`'s own files, `iptables-persistent`, or a systemd unit — say in the report which you chose.

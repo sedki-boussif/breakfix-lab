@@ -1,0 +1,6 @@
+"Works on the server, not from my laptop" is a single sentence that locates the fault precisely: everything from the application down to the loopback interface is fine, and something between the network and the socket is not. Stop testing from the server.
+Reproduce it from the right place. From the VM, curl its own LAN address rather than 127.0.0.1 — `curl -v http://$LAB_LAN_IP:8081/...` — and from your laptop too. Loopback and the LAN address are different paths through the kernel, and only one of them is being filtered.
+`sudo ufw status verbose` lists what is allowed, in order. Compare it against what the lab expects: `EXPECTED_PORTS` in lab.conf.
+Read the rules rather than the summary: `sudo ufw status numbered` shows precedence, and a DENY that appears before an ALLOW wins. `sudo iptables -L -n -v | head -40` shows what ufw actually compiled into.
+Remove the rule that denies the port, keep the default deny inbound, and re-test from the LAN address — not from loopback, which never stopped working and never will.
+Do not fix this by turning the firewall off. The check requires default deny inbound with only the expected ports allowed, because "it works now" with no firewall is a different and worse incident.

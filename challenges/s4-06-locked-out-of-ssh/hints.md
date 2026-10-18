@@ -1,0 +1,6 @@
+From the console, establish the shape before changing anything: is sshd running, and what is it listening on? `systemctl status ssh ssh.socket` and `sudo ss -ltnp | grep -i ssh`.
+On Ubuntu 24.04, sshd is socket-activated: `ssh.socket` owns the listening port and starts `ssh.service` per connection. That means **`Port` in `/etc/ssh/sshd_config` has no effect on what port is listened on** — the socket decides. This is the trap, and it is the reason the change "didn't finish".
+Read both halves and compare them: `grep -i '^port' /etc/ssh/sshd_config` and `systemctl cat ssh.socket` including any drop-in under `/etc/systemd/system/ssh.socket.d/`. They disagree.
+The firewall is the other half. `sudo ufw status numbered` — whichever port you settle on has to be allowed, and the old one is probably still the only one allowed.
+Decide on one port and make all three agree: the socket's `ListenStream`, sshd_config's `Port` (for correctness and for anything that reads it), and the ufw rule. Then `sudo systemctl daemon-reload && sudo systemctl restart ssh.socket`.
+Before you leave the console: open a NEW session from your laptop on the new port and keep the console open until it works. A fix verified only from the console is not verified.

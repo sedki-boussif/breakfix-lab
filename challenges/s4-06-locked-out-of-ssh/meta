@@ -1,0 +1,9 @@
+STAGE=4
+TYPE=incident
+TITLE="Locked out of SSH"
+LEVEL=4
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=irreversible
+PROVEN=unproven

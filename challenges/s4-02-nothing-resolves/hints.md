@@ -1,0 +1,6 @@
+Separate connectivity from resolution. Ping by address works, so packets flow. Try `getent hosts deb.debian.org` and `dig +short deb.debian.org` — if those hang or return nothing, nothing is wrong with the network at all.
+The apps keep working because they talk to each other by IP, by compose service name resolved inside Docker's own DNS, or over a unix socket — none of which go through the host resolver. That is why the symptom looks selective.
+`resolvectl status` on Ubuntu 24.04 shows the DNS servers in use per link, and `/etc/resolv.conf` shows what libc is pointed at — which on 24.04 is normally the stub at 127.0.0.53. Read both: the question is which one is wrong.
+One nameserver is an address that does not answer. Queries go to it, wait for the timeout, and fail — which is why everything is slow before it is broken.
+Fix it where the configuration actually lives: `/etc/systemd/resolved.conf` (then `systemctl restart systemd-resolved`) if resolved is managing it, or the netplan configuration if that is what sets it. Editing `/etc/resolv.conf` directly on a resolved-managed host is overwritten on the next restart.
+Verify with `dig` AND with something the applications use — the check also asserts the stand-in can still reach its database by name, because a resolver fix that breaks container DNS is a new fault.

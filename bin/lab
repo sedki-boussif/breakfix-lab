@@ -284,6 +284,9 @@ cmd_check() {
   if (( status == 0 )); then
     now="$(date +%s)"
     started="$(progress_get "$id" STARTED_AT "$now")"
+    # 0 means "never started" — using it as a timestamp reports the time since
+    # the epoch, which is how a 29871391-minute pass got printed once.
+    [[ "$started" != 0 ]] || started="$now"
     hints="$(progress_get "$id" HINTS_USED 0)"
     progress_set "$id" STATUS passed
     progress_set "$id" PASSED_AT "$now"

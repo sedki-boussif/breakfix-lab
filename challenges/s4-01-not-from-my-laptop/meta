@@ -1,0 +1,9 @@
+STAGE=4
+TYPE=incident
+TITLE="Reachable from the server, not from my laptop"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

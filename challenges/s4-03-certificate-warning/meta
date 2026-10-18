@@ -1,0 +1,9 @@
+STAGE=4
+TYPE=incident
+TITLE="Browsers warn about the certificate"
+LEVEL=3
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=real

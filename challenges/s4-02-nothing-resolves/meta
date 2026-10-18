@@ -1,0 +1,9 @@
+STAGE=4
+TYPE=incident
+TITLE="Nothing resolves"
+LEVEL=2
+APPS=system
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

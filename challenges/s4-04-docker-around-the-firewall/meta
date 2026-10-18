@@ -1,0 +1,9 @@
+STAGE=4
+TYPE=mission
+TITLE="Docker goes around the firewall"
+LEVEL=3
+APPS=stages
+NEEDS=
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

@@ -1,0 +1,6 @@
+Run it first and read the whole output before changing anything. `sudo lynis audit system`, then `sudo lynis show report` or `/var/log/lynis-report.dat` for the machine-readable version. The score is on the last screen as the "hardening index".
+Record the baseline where it will survive — the lab keeps one at `LYNIS_BASELINE` in lab.conf. A score with nothing to compare against is not a measurement.
+The suggestions are ranked by lynis, not by relevance to you. Read each one and ask whether it applies to a single-purpose VM behind one nginx: some will be about mail servers, USB storage, or kernel modules this machine never loads.
+The cheapest real wins are usually: a password policy, `ssh` hardening beyond what you already did in SETUP, kernel sysctl values, and file permissions on cron and at directories. The expensive ones are usually AppArmor profiles and auditd rules.
+Verify SSH by asking sshd rather than reading the file: `sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|pubkeyauthentication)'`. The config file can be overridden by a drop-in, which is the trap this lab has already met once.
+Before you finish, compare `ss -ltnp` against EXPECTED_PORTS and reconcile the difference in both directions — a port you expected and no longer have is as much a finding as one you did not expect.

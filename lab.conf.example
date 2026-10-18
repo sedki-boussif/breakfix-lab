@@ -180,9 +180,21 @@ BACKUP_FINGERPRINT="/var/backups/lab/row-counts.txt"
 # What the ransomware drill scrambles and the restore has to bring back.
 UPLOADS_PATH=""                                # from: docker volume inspect -f '{{.Mountpoint}}' stages_uploads
 
+# --- networking and hardening (stage 4) -------------------------------------
+SSH_PORT="22"                                  # s4-06 changes this, on purpose
+TLS_MIN_DAYS="14"                              # s4-03: a certificate with less left is the fault
+RESOLV_CONF="/etc/resolv.conf"                 # s4-02
+RESOLVED_CONF="/etc/systemd/resolved.conf"     # s4-02, on a systemd-resolved host
+# A name the apps resolve to reach their database. On this lab that is the
+# compose service name from inside the stages network.
+DB_HOSTNAME="db"
+LYNIS_BASELINE="/var/lib/breakfix-lab/lynis-baseline.txt"   # s4-05 records the first score here
+
 # TLS, recorded in section 8 of SETUP.md so s4-03 knows what to swap out.
 TLS_CERT="/etc/nginx/tls/lab.crt"
 TLS_KEY="/etc/nginx/tls/lab.key"
 
 # Port the throwaway smoke-test challenge serves on. Any free high port.
 SMOKE_PORT="18099"
+S4_04_PORT="9090"                              # s4-04: the port published for the demonstration
+S4_06_NEW_PORT="2222"                          # s4-06: where the unfinished change moved SSH
