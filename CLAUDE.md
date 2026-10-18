@@ -52,3 +52,7 @@ Every contribution, by hand or by model, follows these rules.
 
 `#!/usr/bin/env bash` and `set -euo pipefail` at the top, every variable
 quoted, `shellcheck` clean with no warnings. `make lint` is the gate.
+
+## Commit messages
+Do not add Co-Authored-By, Claude-Session, or "Generated with Claude Code"
+trailers to commit messages or PR descriptions.
