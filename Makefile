@@ -92,16 +92,30 @@ selftest:
 guard-test:
 > @[[ ! -e /etc/breakfix-lab ]] || {
 >   echo "refusing: /etc/breakfix-lab exists — this test needs the marker ABSENT"; exit 1; }
+> # This gate used to die with no output at all. The find below names
+> # $$HOME/.breakfix-progress; where that directory did not exist, find exited
+> # non-zero, 2>/dev/null hid the message, pipefail carried the failure through
+> # `| wc -l`, and -e killed the recipe before one line was printed. All the
+> # user saw was make's "Error 1". Both halves are fixed: the directory is
+> # ensured, and the trap means anything else that aborts this recipe says so
+> # rather than leaving an exit code as the only evidence. A gate that fails
+> # closed and silently is the bug class this repo keeps finding.
+> finished=0
+> trap '[[ "$$finished" == 1 ]] || {
+>   echo "guard-test: ABORTED before testing everything — nothing above is a verdict"
+>   echo "            re-run as: make guard-test SHELL=/bin/bash .SHELLFLAGS=-xc"; }' EXIT
+> mkdir -p "$$HOME/.breakfix-progress"
 > n=0; bad=0
 > for s in challenges/*/break.sh; do
->   before="$$(find challenges "$$HOME/.breakfix-progress" -newer "$$s" 2>/dev/null | wc -l)"
+>   before="$$(find challenges "$$HOME/.breakfix-progress" -newer "$$s" | wc -l)"
 >   bash "$$s" >/dev/null 2>&1 && code=0 || code=$$?
 >   n=$$((n+1))
 >   [[ "$$code" -eq 97 ]] || { bad=$$((bad+1)); echo "  $$s exited $$code, wanted 97"; }
->   after="$$(find challenges "$$HOME/.breakfix-progress" -newer "$$s" 2>/dev/null | wc -l)"
+>   after="$$(find challenges "$$HOME/.breakfix-progress" -newer "$$s" | wc -l)"
 >   [[ "$$before" == "$$after" ]] || { bad=$$((bad+1)); echo "  $$s changed something"; }
 > done
 > echo "guard-test: $$n break scripts tested, $$((n-bad)) refused with 97 and changed nothing"
+> finished=1
 > (( bad == 0 ))
 
 scan-secrets:
