@@ -1,0 +1,9 @@
+STAGE=8
+TYPE=mission
+TITLE="Build the server from nothing"
+LEVEL=4
+APPS="stages leaves nurse"
+NEEDS="s4-03-certificate-warning s4-05-raise-the-hardening-score s7-01-backups-worth-having"
+SNAPSHOT=deployed
+RISK=
+PROVEN=unproven

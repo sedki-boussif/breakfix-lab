@@ -340,7 +340,11 @@ health_check() {
   else
     printf 'SKIP  EXPECTED_USERS is not set in lab.conf, so accounts were not checked\n'
   fi
-  users="$(awk -F: '$3==0 {print $1}' /etc/passwd | grep -vx root | tr '\n' ' ')"
+  # The grep finds nothing on a correct machine, which under errexit and
+  # inherit_errexit aborted the whole check at exactly the point where it was
+  # about to pass. A pipeline whose emptiness IS the good news needs the
+  # failure absorbed, not propagated.
+  users="$(awk -F: '$3==0 {print $1}' /etc/passwd | { grep -vx root || true; } | tr '\n' ' ')"
   if [[ -z "$users" ]]; then
     assert_pass "root is the only uid 0"
   else

@@ -177,8 +177,36 @@ BACKUP_ALERT_LOG="/var/log/lab-backup-alerts.log"
 # The restore fingerprint: row counts taken at backup time, compared after a
 # restore. A restore that returns the wrong data silently is the failure mode.
 BACKUP_FINGERPRINT="/var/backups/lab/row-counts.txt"
+# What watches the marker and writes those alerts, and where a restore drill
+# puts the copy it restores. Named here rather than left to the defaults in
+# s7-01, s7-02 and s7-05, because nothing in this lab hard-codes a name.
+BACKUP_WATCH_SERVICE="lab-backup-watch.service"
+STAGES_DRILL_DB="stages_drill"                 # s7-02: the throwaway restore target
+POSTGRES_USER="stages_owner"                   # the stages database owner
+POSTGRES_DB="stages"                           # the live stages database
 # What the ransomware drill scrambles and the restore has to bring back.
 UPLOADS_PATH=""                                # from: docker volume inspect -f '{{.Mountpoint}}' stages_uploads
+
+# --- the three rebuilds (stage 8) -------------------------------------------
+# The acceptance suite in lib/accept.sh reads these. It is the same suite for
+# all three, so anything set here is a standard the machine is held to however
+# it was built.
+#
+# The admin account you create in s8-01: the suite checks that it exists, that
+# it has keys, and that it can escalate. Unset is a failure rather than a skip,
+# because "who can log into this machine" is not a detail of the capstone.
+LAB_ADMIN_USER=""
+# Where the suite restores the archive to in order to read it back. Scratch;
+# removed and recreated on every run, so never point it at anything real.
+S8_RESTORE_TARGET="/var/tmp/s8-restore"
+# s8-02: your recovery time objective, in minutes — the number you wrote down
+# in the s7-02 report, before you knew how long it would really take. The check
+# compares the rebuild against it and reports the gap either way.
+S8_RTO_MINUTES=""
+# s8-03: your own runbooks, in a Git repository of their own. The blind rebuild
+# is scored on what you had to add to them, so the check needs to see the
+# commits you made during it.
+S8_RUNBOOK_DIR=""
 
 # --- networking and hardening (stage 4) -------------------------------------
 SSH_PORT="22"                                  # s4-06 changes this, on purpose

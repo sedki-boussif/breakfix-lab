@@ -275,12 +275,29 @@ cmd_hint() {
 
 cmd_check() {
   local id="$1"; shift
-  local path status=0 now started hints
+  local path status=0 now started hints arg arming=0
   path="$(challenge_path "$id")"
   load_conf
   load_meta "$path"
+  # An arming run is half of a two-phase check: it records the boot id and
+  # exits 0 because nothing went wrong, which is not the same as the challenge
+  # being proved. Recording a pass here would announce "PASSED" before the
+  # reboot that is the whole point, and would satisfy any NEEDS that gate on
+  # it — so arming never counts, whatever the script exits.
+  for arg in "$@"; do
+    [[ "$arg" != --arm ]] || arming=1
+  done
   printf '\n%s%s — %s%s\n\n' "$C_TITLE" "$id" "$TITLE" "$C_OFF"
   LAB_ID="$id" bash "$path/check.sh" "$@" || status=$?
+  if (( arming == 1 )); then
+    if (( status == 0 )); then
+      printf '\n%sARMED%s  %s is not passed yet: do the second phase, then run it without --arm\n' \
+        "$C_TITLE" "$C_OFF" "$id"
+      return 0
+    fi
+    printf '\n%sNOT ARMED%s  (check.sh --arm exited %d)\n' "$C_FAIL" "$C_OFF" "$status"
+    return 1
+  fi
   if (( status == 0 )); then
     now="$(date +%s)"
     started="$(progress_get "$id" STARTED_AT "$now")"
